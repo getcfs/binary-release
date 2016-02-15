@@ -33,11 +33,10 @@ build:
 	go build -i -v -o build/formicd github.com/getcfs/cfs-binary-release/mains/formicd
 
 install:
-	glide install
-	go install ./...
+	go install $(go list ./... | grep -v /vendor/)
 
 test:
-	go test -v ./...
+	go test $(go list ./... | grep -v /vendor/)
 
 prerelease: install
 	ghr -t $(GITHUB_TOKEN) -u $(GITHUB_USER) --replace --prerelease $(VERSION) $(BUILDPATH)

@@ -20,13 +20,13 @@ dependencies:
     - ln -s $PPATH ~/$CIRCLE_PROJECT_REPONAME
     - go get github.com/Masterminds/glide
     - go install github.com/Masterminds/glide
-    - glide install
 general:
   artifacts:
     - "$PPATH/build"
 test:
   pre:
     - go version
+    - echo $GO15VENDOREXPERIMENT
   override:
     - make test
   post:
