@@ -4,7 +4,7 @@ cfs-binary-release is how we perform vendoring AND release management.
 
 ###
 
-If you're using not using Go 1.6 or great you have to set GO15VENDOREXPERIMENT=1
+If you're using not using Go 1.6 or great you have to set `GO15VENDOREXPERIMENT=1`. We're using glide - https://github.com/Masterminds/glide for dependency management (at the moment). This may change if another comes along that sucks less.
 
 ### Updating a existing binary for release
 
