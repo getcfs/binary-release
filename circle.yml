@@ -28,8 +28,6 @@ test:
     - go version
     - echo $GO15VENDOREXPERIMENT
   override:
-    - make test
-  post:
     - GOOS=linux GOARCH=amd64 make build
 deployment:
   master:
