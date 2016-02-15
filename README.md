@@ -52,6 +52,10 @@ If you're using not using Go 1.6 or great you have to set `GO15VENDOREXPERIMENT=
 2. glide install 
 3. /vendor is now what you specified
 
+### Todo
+
+Maybe automagically use git submodules to binaries ?
+
 ### Beware the .gitignore!
 
 The .gitignore in binaries/ explicitly only allows files of type `.go, .conf, and .toml` to make sure the repo stays clean and doesn't accidentally get contaminated with other cruft.
