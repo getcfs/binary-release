@@ -16,15 +16,13 @@ import (
 
 type apiServer struct {
 	sync.RWMutex
-	ds        DirService
 	fs        FileService
 	fl        *flother.Flother
 	blocksize int64
 }
 
-func NewApiServer(ds DirService, fs FileService) *apiServer {
+func NewApiServer(fs FileService) *apiServer {
 	s := new(apiServer)
-	s.ds = ds
 	s.fs = fs
 	// TODO: Get epoch and node id from some config
 	s.fl = flother.NewFlother(time.Time{}, 1)
@@ -32,7 +30,7 @@ func NewApiServer(ds DirService, fs FileService) *apiServer {
 	return s
 }
 
-func (s *apiServer) GetID(custID, shareID, inode, block uint64) []byte {
+func GetID(custID, shareID, inode, block uint64) []byte {
 	// TODO: Figure out what arrangement we want to use for the hash
 	h := murmur3.New128()
 	binary.Write(h, binary.BigEndian, custID)
@@ -47,12 +45,12 @@ func (s *apiServer) GetID(custID, shareID, inode, block uint64) []byte {
 }
 
 func (s *apiServer) GetAttr(ctx context.Context, r *pb.GetAttrRequest) (*pb.GetAttrResponse, error) {
-	attr, err := s.ds.GetAttr(r.Inode)
+	attr, err := s.fs.GetAttr(GetID(1, 1, r.Inode, 0))
 	return &pb.GetAttrResponse{Attr: attr}, err
 }
 
 func (s *apiServer) SetAttr(ctx context.Context, r *pb.SetAttrRequest) (*pb.SetAttrResponse, error) {
-	attr, err := s.ds.SetAttr(r.Attr.Inode, r.Attr, r.Valid)
+	attr, err := s.fs.SetAttr(GetID(1, 1, r.Attr.Inode, 0), r.Attr, r.Valid)
 	return &pb.SetAttrResponse{Attr: attr}, err
 }
 
@@ -69,7 +67,7 @@ func (s *apiServer) Create(ctx context.Context, r *pb.CreateRequest) (*pb.Create
 		Uid:    r.Attr.Uid,
 		Gid:    r.Attr.Gid,
 	}
-	rname, rattr, err := s.ds.Create(r.Parent, inode, r.Name, attr, false)
+	rname, rattr, err := s.fs.Create(GetID(1, 1, r.Parent, 0), GetID(1, 1, inode, 0), inode, r.Name, attr, false)
 	return &pb.CreateResponse{Name: rname, Attr: rattr}, err
 }
 
@@ -86,7 +84,7 @@ func (s *apiServer) MkDir(ctx context.Context, r *pb.MkDirRequest) (*pb.MkDirRes
 		Uid:    r.Attr.Uid,
 		Gid:    r.Attr.Gid,
 	}
-	rname, rattr, err := s.ds.Create(r.Parent, inode, r.Name, attr, true)
+	rname, rattr, err := s.fs.Create(GetID(1, 1, r.Parent, 0), GetID(1, 1, inode, 0), inode, r.Name, attr, true)
 	return &pb.MkDirResponse{Name: rname, Attr: rattr}, err
 }
 
@@ -102,7 +100,7 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 	}
 	cur := int64(0)
 	for cur < r.Size {
-		id := s.GetID(1, 1, r.Inode, block)
+		id := GetID(1, 1, r.Inode, block+1) // block 0 is for inode data
 		log.Printf("Reading Inode: %d, Block: %d ID: %d", r.Inode, block, id)
 		chunk, err := s.fs.GetChunk(id)
 		log.Printf("LEN: %d", len(chunk))
@@ -151,7 +149,7 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 			sendSize = s.blocksize - firstOffset
 		}
 		payload := r.Payload[cur : cur+sendSize]
-		id := s.GetID(1, 1, r.Inode, block)
+		id := GetID(1, 1, r.Inode, block+1) // 0 block is for inode data
 		if firstOffset > 0 || sendSize < s.blocksize {
 			// need to get the block and update
 			chunk := make([]byte, firstOffset+int64(len(payload)))
@@ -177,7 +175,10 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 		if err != nil {
 			return &pb.WriteResponse{Status: 1}, err
 		}
-		s.ds.Update(r.Inode, block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
+		err = s.fs.Update(GetID(1, 1, r.Inode, 0), block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
+		if err != nil {
+			return &pb.WriteResponse{Status: 1}, err
+		}
 		cur += sendSize
 		block += 1
 	}
@@ -185,16 +186,16 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 }
 
 func (s *apiServer) Lookup(ctx context.Context, r *pb.LookupRequest) (*pb.LookupResponse, error) {
-	name, attr, err := s.ds.Lookup(r.Parent, r.Name)
+	name, attr, err := s.fs.Lookup(GetID(1, 1, r.Parent, 0), r.Name)
 	return &pb.LookupResponse{Name: name, Attr: attr}, err
 }
 
 func (s *apiServer) ReadDirAll(ctx context.Context, n *pb.ReadDirAllRequest) (*pb.ReadDirAllResponse, error) {
-	return s.ds.ReadDirAll(n.Inode)
+	return s.fs.ReadDirAll(GetID(1, 1, n.Inode, 0))
 }
 
 func (s *apiServer) Remove(ctx context.Context, r *pb.RemoveRequest) (*pb.RemoveResponse, error) {
-	status, err := s.ds.Remove(r.Parent, r.Name)
+	status, err := s.fs.Remove(GetID(1, 1, r.Parent, 0), r.Name)
 	return &pb.RemoveResponse{Status: status}, err
 }
 
@@ -212,31 +213,31 @@ func (s *apiServer) Symlink(ctx context.Context, r *pb.SymlinkRequest) (*pb.Syml
 		Uid:    r.Uid,
 		Gid:    r.Gid,
 	}
-	return s.ds.Symlink(r.Parent, r.Name, r.Target, attr, inode)
+	return s.fs.Symlink(GetID(1, 1, r.Parent, 0), GetID(1, 1, inode, 0), r.Name, r.Target, attr, inode)
 }
 
 func (s *apiServer) Readlink(ctx context.Context, r *pb.ReadlinkRequest) (*pb.ReadlinkResponse, error) {
-	return s.ds.Readlink(r.Inode)
+	return s.fs.Readlink(GetID(1, 1, r.Inode, 0))
 }
 
 func (s *apiServer) Getxattr(ctx context.Context, r *pb.GetxattrRequest) (*pb.GetxattrResponse, error) {
-	return s.ds.Getxattr(r)
+	return s.fs.Getxattr(GetID(1, 1, r.Inode, 0), r.Name)
 }
 
 func (s *apiServer) Setxattr(ctx context.Context, r *pb.SetxattrRequest) (*pb.SetxattrResponse, error) {
-	return s.ds.Setxattr(r)
+	return s.fs.Setxattr(GetID(1, 1, r.Inode, 0), r.Name, r.Value)
 }
 
 func (s *apiServer) Listxattr(ctx context.Context, r *pb.ListxattrRequest) (*pb.ListxattrResponse, error) {
-	return s.ds.Listxattr(r)
+	return s.fs.Listxattr(GetID(1, 1, r.Inode, 0))
 }
 
 func (s *apiServer) Removexattr(ctx context.Context, r *pb.RemovexattrRequest) (*pb.RemovexattrResponse, error) {
-	return s.ds.Removexattr(r)
+	return s.fs.Removexattr(GetID(1, 1, r.Inode, 0), r.Name)
 }
 
 func (s *apiServer) Rename(ctx context.Context, r *pb.RenameRequest) (*pb.RenameResponse, error) {
-	return s.ds.Rename(r)
+	return s.fs.Rename(GetID(1, 1, r.OldParent, 0), GetID(1, 1, r.NewParent, 0), r.OldName, r.NewName)
 }
 
 func (s *apiServer) Statfs(ctx context.Context, r *pb.StatfsRequest) (*pb.StatfsResponse, error) {

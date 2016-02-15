@@ -4,44 +4,40 @@ ITTERATION := $(shell date +%s)
 OGOPATH := $(shell echo $$GOPATH)
 SRCPATH := "mains/"
 BUILDPATH := "build/"
-export GO15VENDOREXPERIMENT=0
-
+export GO15VENDOREXPERIMENT=1
 
 #global build vars
 GOVERSION := $(shell go version | sed -e 's/ /-/g')
-RINGVERSION := $(shell python -c 'import sys, json; print [x["Rev"] for x in json.load(sys.stdin)["Deps"] if x["ImportPath"] == "github.com/gholt/ring"][0]' < Godeps/Godeps.json)
-VERSION := $(shell python -c 'import sys, json; print [x["Rev"] for x in json.load(sys.stdin)["Deps"] if x["ImportPath"] == "github.com/gholt/ring"][0]' < Godeps/Godeps.json)
 
-world: sync-all save update
+world: sync-all update
 
 sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs formic
 
-save:
-	godep save -v ./...
-
 update:
-	godep update -v ./...
+	glide up
+	glide install
 
 clean:
 	rm -rf $(BUILDPATH)
 
 build:
 	mkdir -p $(BUILDPATH)
-	godep go build -i -v -o build/oort-cli github.com/getcfs/cfs-binary-release/mains/oort-cli
-	godep go build -i -v -o build/oort-bench github.com/getcfs/cfs-binary-release/mains/oort-bench
-	godep go build -i -v -o build/oort-valued github.com/getcfs/cfs-binary-release/mains/oort-valued
-	godep go build -i -v -o build/oort-groupd github.com/getcfs/cfs-binary-release/mains/oort-groupd
-	godep go build -i -v -o build/synd github.com/getcfs/cfs-binary-release/mains/synd
-	godep go build -i -v -o build/syndicate-client github.com/getcfs/cfs-binary-release/mains/syndicate-client
-	godep go build -i -v -o build/cfsdvp github.com/getcfs/cfs-binary-release/mains/cfsdvp
-	godep go build -i -v -o build/cfs github.com/getcfs/cfs-binary-release/mains/cfs
-	godep go build -i -v -o build/formicd github.com/getcfs/cfs-binary-release/mains/formicd
+	go build -i -v -o build/oort-cli github.com/getcfs/cfs-binary-release/mains/oort-cli
+	go build -i -v -o build/oort-bench github.com/getcfs/cfs-binary-release/mains/oort-bench
+	go build -i -v -o build/oort-valued github.com/getcfs/cfs-binary-release/mains/oort-valued
+	go build -i -v -o build/oort-groupd github.com/getcfs/cfs-binary-release/mains/oort-groupd
+	go build -i -v -o build/synd github.com/getcfs/cfs-binary-release/mains/synd
+	go build -i -v -o build/syndicate-client github.com/getcfs/cfs-binary-release/mains/syndicate-client
+	go build -i -v -o build/cfsdvp github.com/getcfs/cfs-binary-release/mains/cfsdvp
+	go build -i -v -o build/cfs github.com/getcfs/cfs-binary-release/mains/cfs
+	go build -i -v -o build/formicd github.com/getcfs/cfs-binary-release/mains/formicd
 
 install:
-	godep go install -v ./...
+	glide install
+	go install ./...
 
 test:
-	godep go test -v ./...
+	go test -v ./...
 
 prerelease: install
 	ghr -t $(GITHUB_TOKEN) -u $(GITHUB_USER) --replace --prerelease $(VERSION) $(BUILDPATH)
@@ -71,5 +67,4 @@ cfs:
 
 formic:
 	cp -av $(OGOPATH)/src/github.com/creiht/formic/formicd $(SRCPATH)
-
 

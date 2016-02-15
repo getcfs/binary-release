@@ -268,6 +268,7 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 			rctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
 			d, err := f.rpc.api.ReadDirAll(rctx, &pb.ReadDirAllRequest{Inode: uint64(r.Node)})
+			log.Println(d)
 			if err != nil {
 				log.Fatalf("Read on dir failed: %v", err)
 			}
@@ -362,25 +363,25 @@ func (f *fs) handleSetattr(r *fuse.SetattrRequest) {
 		Inode: uint64(r.Node),
 	}
 	if r.Valid.Size() {
-		resp.Attr.Size = r.Size
+		a.Size = r.Size
 	}
 	if r.Valid.Mode() {
-		resp.Attr.Mode = r.Mode
+		a.Mode = uint32(r.Mode)
 	}
 	if r.Valid.Atime() {
-		resp.Attr.Atime = r.Atime
+		a.Atime = r.Atime.Unix()
 	}
 	if r.Valid.AtimeNow() {
-		resp.Attr.Atime = time.Now()
+		a.Atime = time.Now().Unix()
 	}
 	if r.Valid.Mtime() {
-		resp.Attr.Mtime = r.Mtime
+		a.Mtime = r.Mtime.Unix()
 	}
 	if r.Valid.Uid() {
-		resp.Attr.Uid = r.Uid
+		a.Uid = r.Uid
 	}
 	if r.Valid.Gid() {
-		resp.Attr.Gid = r.Gid
+		a.Gid = r.Gid
 	}
 	rctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	setAttrResp, err := f.rpc.api.SetAttr(rctx, &pb.SetAttrRequest{Attr: a, Valid: uint32(r.Valid)})
@@ -545,7 +546,7 @@ func (f *fs) handleSetxattr(r *fuse.SetxattrRequest) {
 	req := &pb.SetxattrRequest{
 		Inode:    uint64(r.Node),
 		Name:     r.Name,
-		Xattr:    r.Xattr,
+		Value:    r.Xattr,
 		Position: r.Position,
 		Flags:    r.Flags,
 	}
@@ -580,7 +581,7 @@ func (f *fs) handleRename(r *fuse.RenameRequest) {
 	log.Println("Inside handleRename")
 	log.Println(r)
 	rctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	_, err := f.rpc.api.Rename(rctx, &pb.RenameRequest{Parent: uint64(r.Node), NewDir: uint64(r.NewDir), OldName: r.OldName, NewName: r.NewName})
+	_, err := f.rpc.api.Rename(rctx, &pb.RenameRequest{OldParent: uint64(r.Node), NewParent: uint64(r.NewDir), OldName: r.OldName, NewName: r.NewName})
 	if err != nil {
 		log.Fatalf("Rename failed: %v", err)
 	}
