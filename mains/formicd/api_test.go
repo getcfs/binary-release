@@ -10,69 +10,6 @@ import (
 	pb "github.com/creiht/formic/proto"
 )
 
-// Minimal DirService for testing
-type TestDS struct {
-}
-
-func NewTestDS() *TestDS {
-	return &TestDS{}
-}
-
-func (ds *TestDS) GetAttr(inode uint64) (*pb.Attr, error) {
-	return &pb.Attr{}, nil
-}
-
-func (ds *TestDS) SetAttr(inode uint64, attr *pb.Attr, valid uint32) (*pb.Attr, error) {
-	return &pb.Attr{}, nil
-}
-
-func (ds *TestDS) Create(parent, inode uint64, name string, attr *pb.Attr, isdir bool) (string, *pb.Attr, error) {
-	return name, attr, nil
-}
-
-func (ds *TestDS) Lookup(parent uint64, name string) (string, *pb.Attr, error) {
-	return "", &pb.Attr{}, nil
-}
-
-func (ds *TestDS) ReadDirAll(inode uint64) (*pb.ReadDirAllResponse, error) {
-	return &pb.ReadDirAllResponse{}, nil
-}
-
-func (ds *TestDS) Remove(parent uint64, name string) (int32, error) {
-	return 1, nil
-}
-
-func (ds *TestDS) Update(inode, block, blocksize, size uint64, mtime int64) {
-}
-
-func (ds *TestDS) Symlink(parent uint64, name string, target string, attr *pb.Attr, inode uint64) (*pb.SymlinkResponse, error) {
-	return &pb.SymlinkResponse{}, nil
-}
-
-func (ds *TestDS) Readlink(inode uint64) (*pb.ReadlinkResponse, error) {
-	return &pb.ReadlinkResponse{}, nil
-}
-
-func (ds *TestDS) Getxattr(r *pb.GetxattrRequest) (*pb.GetxattrResponse, error) {
-	return &pb.GetxattrResponse{}, nil
-}
-
-func (ds *TestDS) Setxattr(r *pb.SetxattrRequest) (*pb.SetxattrResponse, error) {
-	return &pb.SetxattrResponse{}, nil
-}
-
-func (ds *TestDS) Listxattr(r *pb.ListxattrRequest) (*pb.ListxattrResponse, error) {
-	return &pb.ListxattrResponse{}, nil
-}
-
-func (ds *TestDS) Removexattr(r *pb.RemovexattrRequest) (*pb.RemovexattrResponse, error) {
-	return &pb.RemovexattrResponse{}, nil
-}
-
-func (ds *TestDS) Rename(r *pb.RenameRequest) (*pb.RenameResponse, error) {
-	return &pb.RenameResponse{}, nil
-}
-
 // Minimal FileService for testing
 type TestFS struct {
 	writes [][]byte
@@ -109,21 +46,75 @@ func (fs *TestFS) addread(d []byte) {
 	fs.reads = append(fs.reads, d)
 }
 
+func (ds *TestFS) GetAttr(id []byte) (*pb.Attr, error) {
+	return &pb.Attr{}, nil
+}
+
+func (ds *TestFS) SetAttr(id []byte, attr *pb.Attr, valid uint32) (*pb.Attr, error) {
+	return &pb.Attr{}, nil
+}
+
+func (ds *TestFS) Create(parent, id []byte, inode uint64, name string, attr *pb.Attr, isdir bool) (string, *pb.Attr, error) {
+	return name, attr, nil
+}
+
+func (ds *TestFS) Lookup(parent []byte, name string) (string, *pb.Attr, error) {
+	return "", &pb.Attr{}, nil
+}
+
+func (ds *TestFS) ReadDirAll(id []byte) (*pb.ReadDirAllResponse, error) {
+	return &pb.ReadDirAllResponse{}, nil
+}
+
+func (ds *TestFS) Remove(parent []byte, name string) (int32, error) {
+	return 1, nil
+}
+
+func (ds *TestFS) Update(id []byte, block, blocksize, size uint64, mtime int64) error {
+	return nil
+}
+
+func (ds *TestFS) Symlink(parent, id []byte, name string, target string, attr *pb.Attr, inode uint64) (*pb.SymlinkResponse, error) {
+	return &pb.SymlinkResponse{}, nil
+}
+
+func (ds *TestFS) Readlink(id []byte) (*pb.ReadlinkResponse, error) {
+	return &pb.ReadlinkResponse{}, nil
+}
+
+func (ds *TestFS) Getxattr(id []byte, name string) (*pb.GetxattrResponse, error) {
+	return &pb.GetxattrResponse{}, nil
+}
+
+func (ds *TestFS) Setxattr(id []byte, name string, value []byte) (*pb.SetxattrResponse, error) {
+	return &pb.SetxattrResponse{}, nil
+}
+
+func (ds *TestFS) Listxattr(id []byte) (*pb.ListxattrResponse, error) {
+	return &pb.ListxattrResponse{}, nil
+}
+
+func (ds *TestFS) Removexattr(id []byte, name string) (*pb.RemovexattrResponse, error) {
+	return &pb.RemovexattrResponse{}, nil
+}
+
+func (ds *TestFS) Rename(oldParent, newParent []byte, oldName, newName string) (*pb.RenameResponse, error) {
+	return &pb.RenameResponse{}, nil
+}
 func TestGetID(t *testing.T) {
-	api := NewApiServer(NewTestDS(), NewTestFS())
-	id1 := api.GetID(uint64(11), uint64(1), uint64(1), uint64(1))
-	id2 := api.GetID(uint64(11), uint64(1), uint64(1), uint64(1))
+	id1 := GetID(uint64(11), uint64(1), uint64(1), uint64(1))
+	id2 := GetID(uint64(11), uint64(1), uint64(1), uint64(1))
 	if !bytes.Equal(id1, id2) {
 		t.Errorf("Generated IDs not equal")
 	}
-	id3 := api.GetID(uint64(11), uint64(1), uint64(1), uint64(2))
+	id3 := GetID(uint64(11), uint64(1), uint64(1), uint64(2))
 	if bytes.Equal(id1, id3) {
 		t.Errorf("Generated IDs were equal")
 	}
 }
 
 func TestCreate(t *testing.T) {
-	api := NewApiServer(NewTestDS(), NewTestFS())
+	api := NewApiServer(NewTestFS())
 	_, err := api.Create(context.Background(), &pb.CreateRequest{Parent: 1, Name: "Test", Attr: &pb.Attr{Gid: 1001, Uid: 1001}})
 	if err != nil {
 		t.Error("Create Failed: ", err)
@@ -133,7 +124,7 @@ func TestCreate(t *testing.T) {
 
 func TestWrite_Basic(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 10
 	chunk := pb.WriteRequest{
 		Inode:   0,
@@ -169,7 +160,7 @@ func TestWrite_Basic(t *testing.T) {
 
 func TestWrite_Chunk(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 5
 	chunk := pb.WriteRequest{
 		Inode:   0,
@@ -195,7 +186,7 @@ func TestWrite_Chunk(t *testing.T) {
 
 func TestWrite_Offset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 10
 	chunk := pb.WriteRequest{
 		Offset:  5,
@@ -235,7 +226,7 @@ func TestWrite_Offset(t *testing.T) {
 
 func TestWrite_MultiOffset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 20
 	chunk := pb.WriteRequest{
 		Offset:  5,
@@ -257,7 +248,7 @@ func TestWrite_MultiOffset(t *testing.T) {
 
 func TestRead_Basic(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 10
 	write := []byte("0123456789")
 	fs.addread(write)
@@ -272,7 +263,7 @@ func TestRead_Basic(t *testing.T) {
 
 func TestRead_Offset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 10
 	write := []byte("0123456789")
 	fs.addread(write)
@@ -287,7 +278,7 @@ func TestRead_Offset(t *testing.T) {
 
 func TestRead_Chunk(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(NewTestDS(), fs)
+	api := NewApiServer(fs)
 	api.blocksize = 10
 	write1 := []byte("0123456789")
 	write2 := []byte("9876543210")

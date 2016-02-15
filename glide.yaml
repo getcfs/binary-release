@@ -1,0 +1,40 @@
+package: github.com/getcfs/cfs-binary-release
+import:
+- package: bazil.org/fuse
+  subpackages:
+  - fuseutil
+- package: github.com/BurntSushi/toml
+- package: github.com/creiht/formic
+  subpackages:
+  - flother
+  - proto
+- package: github.com/docker/go-plugins-helpers
+  subpackages:
+  - sdk
+- package: github.com/gholt/brimtext
+- package: github.com/gholt/brimtime
+- package: github.com/gholt/ring
+- package: github.com/pandemicsyn/cmdctrl
+  subpackages:
+  - api
+- package: github.com/pandemicsyn/oort
+  subpackages:
+  - api/groupproto
+  - api/valueproto
+  - oort
+  - oortstore
+- package: github.com/pandemicsyn/syndicate
+  subpackages:
+  - api/proto
+  - syndicate
+  - utils/srvconf
+- package: github.com/peterh/liner
+- package: github.com/pkg/profile
+- package: github.com/spaolacci/murmur3
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: google.golang.org/grpc
+  subpackages:
+  - credentials
+  - grpclog
