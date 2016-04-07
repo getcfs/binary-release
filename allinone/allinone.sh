@@ -160,13 +160,17 @@ go get github.com/creiht/formic/cfswrap
 go install github.com/creiht/formic/cfswrap
 ln -sf $GOPATH/bin/cfswrap /sbin/mount.cfs
 
-echo "Installing oohhc-acctd & oohhc-cli"
+echo "Installing oohhc-acctd, oohhc-filesysd & oohhc-cli"
 go get github.com/letterj/oohhc/oohhc-acctd
 go install github.com/letterj/oohhc/oohhc-acctd
+go get github.com/letterj/oohhc/oohhc-filesysd
+go install github.com/letterj/oohhc/oohhc-filesysd
 go get github.com/letterj/oohhc/oohhc-cli
 go install github.com/letterj/oohhc/oohhc-cli
 cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-acctd.service /lib/systemd/system
+cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-filesysd.service /lib/systemd/system
 SUPERKEY=$(python -c "import uuid; print uuid.uuid4()")
+# /etc/default/oohhc-acctd
 echo 'OOHHC_ACCT_PORT=8449' > /etc/default/oohhc-acctd
 echo "OOHHC_ACCT_OORT_GROUP_HOST=$TENDOT:6380" >> /etc/default/oohhc-acctd
 echo 'OOHHC_ACCT_TLS=true' >> /etc/default/oohhc-acctd
@@ -179,6 +183,14 @@ echo 'OOHHC_ACCT_GS_CA_FILE=/etc/syndicate/ca.pem' >> /etc/default/oohhc-acctd
 echo 'OOHHC_ACCT_GS_CERT_FILE=/etc/syndicate/client.crt' >> /etc/default/oohhc-acctd
 echo 'OOHHC_ACCT_GS_KEY_FILE=/etc/syndicate/client.key' >> /etc/default/oohhc-acctd
 echo 'OOHHC_ACCT_GS_SKIP_VERIFY=false' >> /etc/default/oohhc-acctd
+# /etc/default/oohhc-filesysd
+echo 'OOHHC_FILESYS_PORT=8448' > /etc/default/oohhc-filesysd
+echo 'OOHHC_FILESYS_GS_CERT_FILE=/etc/syndicate/client.crt' >> /etc/default/oohhc-filesysd
+echo 'OOHHC_FILESYS_GS_KEY_FILE=/etc/syndicate/client.key' >> /etc/default/oohhc-filesysd
+echo 'OOHHC_FILESYS_GS_CA_FILE=/etc/syndicate/ca.pem' >> /etc/default/oohhc-filesysd
+echo "OOHHC_FILESYS_OORT_GROUP_HOST=$TENDOT:6380" >> /etc/default/oohhc-filesysd
+echo 'OOHHC_FILESYS_CERT_FILE=/etc/syndicate/server.crt' >> /etc/default/oohhc-filesysd
+echo 'OOHHC_FILESYS_KEY_FILE=/etc/syndicate/server.key' >> /etc/default/oohhc-filesysd
 
 
 
@@ -220,6 +232,7 @@ echo "systemctl start oort-valued"
 echo "systemctl start oort-groupd"
 echo "systemctl start formicd"
 echo "systemctl start oohhc-acctd"
+echo "systemctl start oohhc-filesysd"
 echo
 echo "You can add accounts with oohhc-cli"
 echo "Example:"
@@ -229,6 +242,6 @@ echo "!! Don't forget to remove the place holder nodes from the ring once you've
 echo ""
 echo "For example: to create a cfsfuse mount point create the location and run the mount command:"
 echo "mkdir -p /mnt/fsdrive"
-echo "mount -t cfs  iad3://cfsteam/allinone/ /mnt/fsdrive -o host=localhost:8445"
+echo "mount -t cfs  aio0://cfsteam/allinone/ /mnt/fsdrive -o host=localhost:8445"
 echo ""
 echo "If you plan on using *THIS* session and to get the git enhanced prompt make sure to source ~/.bashrc to load path changes"
