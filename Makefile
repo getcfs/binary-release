@@ -14,7 +14,7 @@ VERSION := $(shell python -c 'import sys, json; print [x["Rev"] for x in json.lo
 
 world: sync-all save update
 
-sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs cfswrap formic oohhc-acct oohhc-cli
+sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs cfswrap formic oohhc-acct oohhc-cli oohhc-filesysd
 
 save:
 	godep save -v ./...
@@ -39,6 +39,7 @@ build:
 	godep go build -i -v -o build/cfswrap github.com/getcfs/cfs-binary-release/mains/cfswrap
 	godep go build -i -v -o build/oohhc-acctd github.com/getcfs/cfs-binary-release/mains/oohhc-acctd
 	godep go build -i -v -o build/oohhc-cli github.com/getcfs/cfs-binary-release/mains/oohhc-cli
+	godep go build -i -v -o build/oohhc-filesysd github.com/getcfs/cfs-binary-release/mains/oohhc-filesysd
 
 install:
 	godep go install -v ./...
@@ -83,3 +84,6 @@ oohhc-acct:
 
 oohhc-cli:
 	cp -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-cli $(SRCPATH)
+
+oohhc-filesysd:
+	cp -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-filesysd $(SRCPATH)
