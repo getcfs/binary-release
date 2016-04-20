@@ -32,7 +32,7 @@ deployment:
   master:
     branch: master
     commands:
-        - utils/ghr -t $GITHUB_TOKEN -u getcfs --replace --prerelease pre-`cat VERSION` $BUILDPATH
+        - utils/ghr -t $GITHUB_TOKEN -u getcfs --replace --prerelease `cat VERSION`-pre $BUILDPATH
   production:
     branch: prod
     commands:

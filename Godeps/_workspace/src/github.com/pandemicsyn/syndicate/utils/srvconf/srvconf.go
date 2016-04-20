@@ -61,7 +61,7 @@ func GetHardwareProfile() (*pb.HardwareProfile, error) {
 		entry := &pb.Disk{
 			Path:   d[k].Mountpoint,
 			Device: d[k].Device,
-			Size_:  usage.Total,
+			Size:   usage.Total,
 			Used:   usage.Used,
 		}
 		hw.Disks = append(hw.Disks, entry)

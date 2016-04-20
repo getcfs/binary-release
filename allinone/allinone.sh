@@ -159,6 +159,7 @@ echo "Installing cfswrap and setting up the mount command"
 go get github.com/creiht/formic/cfswrap
 go install github.com/creiht/formic/cfswrap
 ln -sf $GOPATH/bin/cfswrap /sbin/mount.cfs
+ln -sf $GOPATH/bin/cfs /usr/local/bin/cfs
 
 echo "Installing oohhc-acctd, oohhc-filesysd & oohhc-cli"
 go get github.com/letterj/oohhc/oohhc-acctd
@@ -171,28 +172,20 @@ cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/syste
 cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-filesysd.service /lib/systemd/system
 SUPERKEY=$(python -c "import uuid; print uuid.uuid4()")
 # /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_PORT=8449' > /etc/default/oohhc-acctd
-echo "OOHHC_ACCT_OORT_GROUP_HOST=$TENDOT:6380" >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_TLS=true' >> /etc/default/oohhc-acctd
 echo "OOHHC_ACCT_SUPERUSER_KEY=$SUPERKEY" >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_SKIP_VERIFY=false' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_CERT_FILE=/etc/syndicate/server.crt' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_KEY_FILE=/etc/syndicate/server.key' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_GS_MUTUALTLS=true' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_GS_CA_FILE=/etc/syndicate/ca.pem' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_GS_CERT_FILE=/etc/syndicate/client.crt' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_GS_KEY_FILE=/etc/syndicate/client.key' >> /etc/default/oohhc-acctd
-echo 'OOHHC_ACCT_GS_SKIP_VERIFY=false' >> /etc/default/oohhc-acctd
-# /etc/default/oohhc-filesysd
-echo 'OOHHC_FILESYS_PORT=8448' > /etc/default/oohhc-filesysd
-echo 'OOHHC_FILESYS_GS_CERT_FILE=/etc/syndicate/client.crt' >> /etc/default/oohhc-filesysd
-echo 'OOHHC_FILESYS_GS_KEY_FILE=/etc/syndicate/client.key' >> /etc/default/oohhc-filesysd
-echo 'OOHHC_FILESYS_GS_CA_FILE=/etc/syndicate/ca.pem' >> /etc/default/oohhc-filesysd
-echo "OOHHC_FILESYS_OORT_GROUP_HOST=$TENDOT:6380" >> /etc/default/oohhc-filesysd
-echo 'OOHHC_FILESYS_CERT_FILE=/etc/syndicate/server.crt' >> /etc/default/oohhc-filesysd
-echo 'OOHHC_FILESYS_KEY_FILE=/etc/syndicate/server.key' >> /etc/default/oohhc-filesysd
-
-
+# setup keys and certs for oohhc
+mkdir -p /var/lib/oohhc-acct
+mkdir -p /var/lib/oohhc-filesys
+ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-acct/server.key
+ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-acct/server.crt
+ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oohhc-acct/ca.pem
+ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-acct/client.key
+ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-acct/client.crt
+ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-filesys/server.key
+ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-filesys/server.crt
+ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oohhc-filesys/ca.pem
+ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-filesys/client.key
+ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-filesys/client.crt
 
 # Adding some helpful git stuff to the .bashrc
 if [ "$FANCYPROMPT" = "yes" ]; then
@@ -226,6 +219,8 @@ sed -e "s/TENDOTME/$TENDOT/g" /etc/syndicate/cfssl/localhost.json.tmpl | sed -e 
 cfssl gencert -ca=/etc/syndicate/cfssl/ca.pem -ca-key=/etc/syndicate/cfssl/ca-key.pem -config=/etc/syndicate/cfssl/ca-config.json -profile=client-server /etc/syndicate/cfssl/localhost.json | cfssljson -bare localhost
 
 echo
+echo "!! Don't forget to remove the place holder nodes from the ring once you've started your nodes"
+echo
 echo "To start services run:"
 echo "systemctl start synd"
 echo "systemctl start oort-valued"
@@ -234,14 +229,22 @@ echo "systemctl start formicd"
 echo "systemctl start oohhc-acctd"
 echo "systemctl start oohhc-filesysd"
 echo
+echo "Create a mount directory"
+echo "mkdir -p /mnt/cfsdrive"
+echo
 echo "You can add accounts with oohhc-cli"
 echo "Example:"
 echo "oohhc-cli -k $SUPERKEY create -N testco"
 echo
-echo "!! Don't forget to remove the place holder nodes from the ring once you've started your nodes"
-echo ""
+echo "You can create an file system with the cfs client"
+echo "Example:"
+echo "cfs -T [account token uuid] create aio://[account uuid] -N cfsdrive01"
+echo
+echo "Once you create a file system you need to grant a local ip address 127.0.0.1"
+echo "Example:"
+echo "cfs -T [account token uuid] grant aio://[account uuid]/[file system uuid] -addr 127.0.0.1"
+echo
 echo "For example: to create a cfsfuse mount point create the location and run the mount command:"
-echo "mkdir -p /mnt/fsdrive"
 echo "mount -t cfs  aio0://cfsteam/allinone/ /mnt/fsdrive -o host=localhost:8445"
-echo ""
+echo
 echo "If you plan on using *THIS* session and to get the git enhanced prompt make sure to source ~/.bashrc to load path changes"
