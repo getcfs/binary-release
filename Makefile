@@ -9,7 +9,6 @@ export GO15VENDOREXPERIMENT=0
 
 #global build vars
 GOVERSION := $(shell go version | sed -e 's/ /-/g')
-RINGVERSION := $(shell python -c 'import sys, json; print [x["Rev"] for x in json.load(sys.stdin)["Deps"] if x["ImportPath"] == "github.com/gholt/ring"][0]' < Godeps/Godeps.json)
 
 world: sync-all save update
 
@@ -64,6 +63,10 @@ build:
 	godep go build -i -v -o build/oohhc-acctd github.com/getcfs/cfs-binary-release/mains/oohhc-acctd
 	godep go build -i -v -o build/oohhc-cli github.com/getcfs/cfs-binary-release/mains/oohhc-cli
 	godep go build -i -v -o build/oohhc-filesysd github.com/getcfs/cfs-binary-release/mains/oohhc-filesysd
+
+darwin: export GOOS=darwin
+darwin:
+	godep go build -i -v -o build/cfs.osx github.com/getcfs/cfs-binary-release/mains/cfs
 
 install:
 	godep go install -v ./...

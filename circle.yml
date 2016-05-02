@@ -1,39 +1,42 @@
 machine:
-  pre:
-    - wget https://storage.googleapis.com/golang/go1.6.1.linux-amd64.tar.gz
-    - mkdir ~/go1.6.1
-    - tar -C ~/go1.6.1 -xzf go1.6.1.linux-amd64.tar.gz
   environment:
-    GOROOT: ${HOME}/go1.6.1/go
+    GOVER: 1.6.1
+    GOROOT: ${HOME}/go$GOVER/go
     GO15VENDOREXPERIMENT: 0
-    GOPATH: ${HOME}/go
-    PATH: $GOPATH/bin:${GOROOT}/bin:${PATH}
-    PPATH: ${HOME}/go/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
-    BUILDPATH: $PPATH/build/
+    BUILDPATH: ${HOME}/${CIRCLE_PROJECT_REPONAME}/build
+    PATH: ${GOROOT}/bin:${PATH}
   post:
+    - sudo rm -rf $GOROOT
+    - sudo rm -rf /usr/local/go
+    - mkdir -v -p $GOROOT
+    - if [ ! -e go$GOVER.linux-amd64.tar.gz ]; then curl -o go$GOVER.linux-amd64.tar.gz https://storage.googleapis.com/golang/go$GOVER.linux-amd64.tar.gz; fi
+    - tar -C ~/go1.6.1 -xzf go$GOVER.linux-amd64.tar.gz
     - go version
-    - echo $PPATH
 dependencies:
-  pre:
-    - mkdir -p ${HOME}/go/src/github.com/$CIRCLE_PROJECT_USERNAME
-    - mv ~/$CIRCLE_PROJECT_REPONAME ${HOME}/go/src/github.com/$CIRCLE_PROJECT_USERNAME
-    - ln -s $PPATH ~/$CIRCLE_PROJECT_REPONAME
+  cache_directories:
+    - ~/go$GOVERSION.linux-amd64.tar.gz
+  override:
     - go get github.com/tools/godep
     - go install github.com/tools/godep
+    - mkdir -p $HOME/.go_project/src/github.com/$CIRCLE_PROJECT_USERNAME
+    - ln -fs $HOME/$CIRCLE_PROJECT_REPONAME $HOME/.go_project/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
+    - |
+      echo 'export GOPATH=$GOPATH:$HOME/.go_project' >> ~/.circlerc
 general:
   artifacts:
-    - "$PPATH/build"
+    - "$BUILDPATH"
 test:
   pre:
     - go version
   override:
-    - GOOS=linux GOARCH=amd64 make build
+    - cd $HOME/.go_project/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME && GOOS=linux GOARCH=amd64 make build
+    - cd $HOME/.go_project/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME && GOOS=darwin make darwin
 deployment:
   master:
     branch: master
     commands:
-        - utils/ghr -t $GITHUB_TOKEN -u getcfs --replace --prerelease pre-`cat VERSION` $BUILDPATH
+        - cd $HOME/.go_project/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME && utils/ghr -t $GITHUB_TOKEN -u getcfs --replace --prerelease pre-`cat VERSION` $BUILDPATH
   production:
     branch: prod
     commands:
-        - utils/ghr -t $GITHUB_TOKEN -u getcfs `cat VERSION` $BUILDPATH
+        - cd $HOME/.go_project/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME && utils/ghr -t $GITHUB_TOKEN -u getcfs `cat VERSION` $BUILDPATH

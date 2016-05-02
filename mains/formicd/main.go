@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"path"
 
@@ -16,6 +18,9 @@ import (
 	"github.com/pandemicsyn/oort/api"
 
 	"net"
+
+	"github.com/pandemicsyn/syndicate/utils/sysmetrics"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // FatalIf is just a lazy log/panic on error func
@@ -33,6 +38,20 @@ var formicdVersion string
 var buildDate string
 var goVersion string
 
+func setupMetrics(listenAddr, enabledCollectors string) {
+	if enabledCollectors == "" {
+		enabledCollectors = sysmetrics.FilterAvailableCollectors(sysmetrics.DefaultCollectors)
+	}
+	collectors, err := sysmetrics.LoadCollectors(enabledCollectors)
+	if err != nil {
+		log.Fatalf("Couldn't load collectors: %s", err)
+	}
+	nodeCollector := sysmetrics.New(collectors)
+	prometheus.MustRegister(nodeCollector)
+	http.Handle("/metrics", prometheus.Handler())
+	go http.ListenAndServe(listenAddr, nil)
+}
+
 func main() {
 	flag.Parse()
 	if *printVersionInfo {
@@ -43,6 +62,8 @@ func main() {
 	}
 
 	cfg := resolveConfig(nil)
+
+	setupMetrics(cfg.metricsAddr, cfg.metricsCollectors)
 
 	var opts []grpc.ServerOption
 	creds, err := credentials.NewServerTLSFromFile(path.Join(cfg.path, "server.crt"), path.Join(cfg.path, "server.key"))

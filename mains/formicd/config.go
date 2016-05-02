@@ -14,6 +14,8 @@ type config struct {
 	insecureSkipVerify bool
 	skipMutualTLS      bool
 	nodeId             int
+	metricsAddr        string
+	metricsCollectors  string
 }
 
 func resolveConfig(c *config) *config {
@@ -56,6 +58,12 @@ func resolveConfig(c *config) *config {
 			cfg.nodeId = val
 		}
 	}
-
+	cfg.metricsAddr = ":9100"
+	if env := os.Getenv("FORMICD_METRICS_ADDR"); env != "" {
+		cfg.metricsAddr = env
+	}
+	if env := os.Getenv("FORMICD_METRICS_COLLECTORS"); env != "" {
+		cfg.metricsCollectors = env
+	}
 	return cfg
 }
