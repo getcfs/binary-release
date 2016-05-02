@@ -12,7 +12,7 @@ GOVERSION := $(shell go version | sed -e 's/ /-/g')
 
 world: sync-all save update
 
-sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs cfswrap formic oohhc-acct oohhc-cli oohhc-filesysd
+sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs formic oohhc-filesysd
 
 save:
 	godep save -v ./...
@@ -59,9 +59,6 @@ build:
 			-X main.formicdVersion=$(VERSION) \
 			-X main.goVersion=$(shell go version | sed -e 's/ /-/g') \
 			-X main.buildDate=$(shell date -u +%Y-%m-%d.%H:%M:%S)" github.com/getcfs/cfs-binary-release/mains/formicd
-	godep go build -i -v -o build/cfswrap github.com/getcfs/cfs-binary-release/mains/cfswrap
-	godep go build -i -v -o build/oohhc-acctd github.com/getcfs/cfs-binary-release/mains/oohhc-acctd
-	godep go build -i -v -o build/oohhc-cli github.com/getcfs/cfs-binary-release/mains/oohhc-cli
 	godep go build -i -v -o build/oohhc-filesysd github.com/getcfs/cfs-binary-release/mains/oohhc-filesysd
 
 darwin: export GOOS=darwin
@@ -100,17 +97,8 @@ cfsdvp:
 cfs:
 	cp -av $(OGOPATH)/src/github.com/creiht/formic/cfs $(SRCPATH)
 
-cfswrap:
-	cp -av $(OGOPATH)/src/github.com/creiht/formic/cfswrap $(SRCPATH)
-
 formic:
 	cp -av $(OGOPATH)/src/github.com/creiht/formic/formicd $(SRCPATH)
-
-oohhc-acct:
-	cp -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-acctd $(SRCPATH)
-
-oohhc-cli:
-	cp -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-cli $(SRCPATH)
 
 oohhc-filesysd:
 	cp -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-filesysd $(SRCPATH)

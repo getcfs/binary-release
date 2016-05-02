@@ -156,31 +156,14 @@ go install github.com/creiht/formic/cfs
 cp -av $GOPATH/src/github.com/creiht/formic/packaging/root/usr/share/formicd/systemd/formicd.service /lib/systemd/system
 TENDOT=$(ifconfig | awk -F "[: ]+" '/inet addr:/ { if ($4 != "127.0.0.1") print $4 }' | egrep "^10\.")
 echo "Installing cfswrap and setting up the mount command"
-go get github.com/creiht/formic/cfswrap
-go install github.com/creiht/formic/cfswrap
-ln -sf $GOPATH/bin/cfswrap /sbin/mount.cfs
-ln -sf $GOPATH/bin/cfs /usr/local/bin/cfs
 
 echo "Installing oohhc-acctd, oohhc-filesysd & oohhc-cli"
-go get github.com/letterj/oohhc/oohhc-acctd
-go install github.com/letterj/oohhc/oohhc-acctd
 go get github.com/letterj/oohhc/oohhc-filesysd
 go install github.com/letterj/oohhc/oohhc-filesysd
-go get github.com/letterj/oohhc/oohhc-cli
-go install github.com/letterj/oohhc/oohhc-cli
 cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-acctd.service /lib/systemd/system
-cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-filesysd.service /lib/systemd/system
 SUPERKEY=$(python -c "import uuid; print uuid.uuid4()")
-# /etc/default/oohhc-acctd
-echo "OOHHC_ACCT_SUPERUSER_KEY=$SUPERKEY" >> /etc/default/oohhc-acctd
 # setup keys and certs for oohhc
-mkdir -p /var/lib/oohhc-acct
 mkdir -p /var/lib/oohhc-filesys
-ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-acct/server.key
-ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-acct/server.crt
-ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oohhc-acct/ca.pem
-ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-acct/client.key
-ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-acct/client.crt
 ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-filesys/server.key
 ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-filesys/server.crt
 ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oohhc-filesys/ca.pem
@@ -226,15 +209,12 @@ echo "systemctl start synd"
 echo "systemctl start oort-valued"
 echo "systemctl start oort-groupd"
 echo "systemctl start formicd"
-echo "systemctl start oohhc-acctd"
 echo "systemctl start oohhc-filesysd"
 echo
 echo "Create a mount directory"
 echo "mkdir -p /mnt/cfsdrive"
 echo
-echo "You can add accounts with oohhc-cli"
-echo "Example:"
-echo "oohhc-cli -k $SUPERKEY create -N testco"
+echo "Use acctdv2 and oort-cli to create an account"
 echo
 echo "You can create an file system with the cfs client"
 echo "Example:"
