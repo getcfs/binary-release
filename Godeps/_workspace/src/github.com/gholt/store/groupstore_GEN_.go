@@ -76,45 +76,50 @@ type defaultGroupStore struct {
 	watcherState            groupWatcherState
 	restartChan             chan error
 
-	statsLock                    sync.Mutex
-	lookups                      int32
-	lookupErrors                 int32
-	lookupGroups                 int32
-	lookupGroupItems             int32
-	reads                        int32
-	readErrors                   int32
-	readGroups                   int32
-	readGroupItems               int32
-	writes                       int32
-	writeErrors                  int32
-	writesOverridden             int32
-	deletes                      int32
-	deleteErrors                 int32
-	deletesOverridden            int32
-	outBulkSets                  int32
-	outBulkSetValues             int32
-	outBulkSetPushes             int32
-	outBulkSetPushValues         int32
-	inBulkSets                   int32
-	inBulkSetDrops               int32
-	inBulkSetInvalids            int32
-	inBulkSetWrites              int32
-	inBulkSetWriteErrors         int32
-	inBulkSetWritesOverridden    int32
-	outBulkSetAcks               int32
-	inBulkSetAcks                int32
-	inBulkSetAckDrops            int32
-	inBulkSetAckInvalids         int32
-	inBulkSetAckWrites           int32
-	inBulkSetAckWriteErrors      int32
-	inBulkSetAckWritesOverridden int32
-	outPullReplications          int32
-	inPullReplications           int32
-	inPullReplicationDrops       int32
-	inPullReplicationInvalids    int32
-	expiredDeletions             int32
-	compactions                  int32
-	smallFileCompactions         int32
+	statsLock    sync.Mutex
+	lookups      int32
+	lookupErrors int32
+
+	lookupGroups     int32
+	lookupGroupItems int32
+
+	reads      int32
+	readErrors int32
+
+	readGroups     int32
+	readGroupItems int32
+
+	writes                        int32
+	writeErrors                   int32
+	writesOverridden              int32
+	deletes                       int32
+	deleteErrors                  int32
+	deletesOverridden             int32
+	outBulkSets                   int32
+	outBulkSetValues              int32
+	outBulkSetPushes              int32
+	outBulkSetPushValues          int32
+	inBulkSets                    int32
+	inBulkSetDrops                int32
+	inBulkSetInvalids             int32
+	inBulkSetWrites               int32
+	inBulkSetWriteErrors          int32
+	inBulkSetWritesOverridden     int32
+	outBulkSetAcks                int32
+	inBulkSetAcks                 int32
+	inBulkSetAckDrops             int32
+	inBulkSetAckInvalids          int32
+	inBulkSetAckWrites            int32
+	inBulkSetAckWriteErrors       int32
+	inBulkSetAckWritesOverridden  int32
+	outPullReplications           int32
+	outPullReplicationNanoseconds int64
+	inPullReplications            int32
+	inPullReplicationDrops        int32
+	inPullReplicationInvalids     int32
+	expiredDeletions              int32
+	compactions                   int32
+	smallFileCompactions          int32
 
 	// Used by the flusher only
 	modifications int32
@@ -425,7 +430,7 @@ func (store *defaultGroupStore) Flush(ctx context.Context) error {
 func (store *defaultGroupStore) Lookup(ctx context.Context, keyA uint64, keyB uint64, childKeyA uint64, childKeyB uint64) (int64, uint32, error) {
 	atomic.AddInt32(&store.lookups, 1)
 	timestampbits, _, length, err := store.lookup(keyA, keyB, childKeyA, childKeyB)
-	if err != nil {
+	if err != nil && err != errNotFound {
 		atomic.AddInt32(&store.lookupErrors, 1)
 	}
 	return int64(timestampbits >> _TSB_UTIL_BITS), length, err
@@ -489,7 +494,7 @@ func (store *defaultGroupStore) ReadGroup(ctx context.Context, keyA uint64, keyB
 func (store *defaultGroupStore) Read(ctx context.Context, keyA uint64, keyB uint64, childKeyA uint64, childKeyB uint64, value []byte) (int64, []byte, error) {
 	atomic.AddInt32(&store.reads, 1)
 	timestampbits, value, err := store.read(keyA, keyB, childKeyA, childKeyB, value)
-	if err != nil {
+	if err != nil && err != errNotFound {
 		atomic.AddInt32(&store.readErrors, 1)
 	}
 	return int64(timestampbits >> _TSB_UTIL_BITS), value, err

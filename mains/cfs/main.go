@@ -101,8 +101,9 @@ func main() {
 	}
 	app.Commands = []cli.Command{
 		{
-			Name:  "show",
-			Usage: "Show a File Systems",
+			Name:      "show",
+			Usage:     "Show a File Systems",
+			ArgsUsage: "<region>://<account uuid>/<file system uuid>",
 			Action: func(c *cli.Context) {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for show.")
@@ -110,22 +111,13 @@ func main() {
 				}
 				if token == "" {
 					fmt.Println("Token is required")
-				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					panic(err)
-				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
 					os.Exit(1)
 				}
-				acctNum = u.Host
-				fsNum = u.Path[1:]
+				serverAddr, acctNum, fsNum = parseurl(c.Args().Get(0), "8448")
+				if fsNum == "" {
+					fmt.Println("Missing file system id")
+					os.Exit(1)
+				}
 				conn := setupWS(serverAddr)
 				ws := mb.NewFileSystemAPIClient(conn)
 				result, err := ws.ShowFS(context.Background(), &mb.ShowFSRequest{Acctnum: acctNum, FSid: fsNum, Token: token})
@@ -140,8 +132,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "create",
-			Usage: "Create a File Systems",
+			Name:      "create",
+			Usage:     "Create a File Systems",
+			ArgsUsage: "<region>://<account uuid> -N <file system name>",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, N",
@@ -157,24 +150,8 @@ func main() {
 				if token == "" {
 					fmt.Println("Token is required")
 				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Printf("Url parse error: %v", err)
-					os.Exit(1)
-				}
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
-					os.Exit(1)
-				}
-				acctNum = u.Host
-				if u.Path != "" {
-					fmt.Println("Invalid url scheme")
-					os.Exit(1)
-				}
+				// For create serverAddr and acctnum are required
+				serverAddr, acctNum, _ = parseurl(c.Args().Get(0), "8448")
 				if c.String("name") == "" {
 					fmt.Println("File system name is a required field.")
 					os.Exit(1)
@@ -193,8 +170,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "list",
-			Usage: "List File Systems for an account",
+			Name:      "list",
+			Usage:     "List File Systems for an account",
+			ArgsUsage: "<region>://<account uuid>",
 			Action: func(c *cli.Context) {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for list.")
@@ -202,26 +180,9 @@ func main() {
 				}
 				if token == "" {
 					fmt.Println("Token is required")
-				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Println("Invalid url scheme")
 					os.Exit(1)
 				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
-					os.Exit(1)
-				}
-				acctNum = u.Host
-				if u.Path != "" {
-					fmt.Println("Invaid url")
-					os.Exit(1)
-				}
+				serverAddr, acctNum, _ = parseurl(c.Args().Get(0), "8448")
 				conn := setupWS(serverAddr)
 				ws := mb.NewFileSystemAPIClient(conn)
 				result, err := ws.ListFS(context.Background(), &mb.ListFSRequest{Acctnum: acctNum, Token: token})
@@ -236,8 +197,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "delete",
-			Usage: "Delete a File Systems",
+			Name:      "delete",
+			Usage:     "Delete a File Systems",
+			ArgsUsage: "<region>://<account uuid>/<file system uuid>",
 			Action: func(c *cli.Context) {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for delete.")
@@ -246,22 +208,11 @@ func main() {
 				if token == "" {
 					fmt.Println("Token is required")
 				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Println("Invalid url scheme")
+				serverAddr, acctNum, fsNum = parseurl(c.Args().Get(0), "8448")
+				if fsNum == "" {
+					fmt.Println("Missing file system id")
 					os.Exit(1)
 				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
-					os.Exit(1)
-				}
-				acctNum = u.Host
-				fsNum = u.Path[1:]
 				conn := setupWS(serverAddr)
 				ws := mb.NewFileSystemAPIClient(conn)
 				result, err := ws.DeleteFS(context.Background(), &mb.DeleteFSRequest{Acctnum: acctNum, FSid: fsNum, Token: token})
@@ -276,8 +227,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "update",
-			Usage: "Update a File Systems",
+			Name:      "update",
+			Usage:     "Update a File Systems",
+			ArgsUsage: "<region>://<account uuid>/<file system uuid> -o [OPTIONS]",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "name, N",
@@ -292,28 +244,18 @@ func main() {
 			},
 			Action: func(c *cli.Context) {
 				if !c.Args().Present() {
-					fmt.Println("Invalid syntax for delete.")
+					fmt.Println("Invalid syntax for update.")
 					os.Exit(1)
 				}
 				if token == "" {
 					fmt.Println("Token is required")
-				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Printf("Url Parse error: %v", err)
 					os.Exit(1)
 				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
+				serverAddr, acctNum, fsNum = parseurl(c.Args().Get(0), "8448")
+				if fsNum == "" {
+					fmt.Println("Missing file system id")
 					os.Exit(1)
 				}
-				acctNum = u.Host
-				fsNum = u.Path[1:]
 				if c.String("name") != "" {
 					fmt.Printf("Invalid File System String: %q\n", c.String("name"))
 					os.Exit(1)
@@ -336,8 +278,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "grant",
-			Usage: "Grant an Addr access to a File Systems",
+			Name:      "grant",
+			Usage:     "Grant an Addr access to a File Systems",
+			ArgsUsage: "<region>://<account uuid>/<file system uuid> -addr <IP Address>",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "addr",
@@ -358,22 +301,11 @@ func main() {
 					fmt.Println("addr is required")
 					os.Exit(1)
 				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Println("Invalid url scheme")
+				serverAddr, acctNum, fsNum = parseurl(c.Args().Get(0), "8448")
+				if fsNum == "" {
+					fmt.Println("Missing file system id")
 					os.Exit(1)
 				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
-					os.Exit(1)
-				}
-				acctNum = u.Host
-				fsNum = u.Path[1:]
 				conn := setupWS(serverAddr)
 				ws := mb.NewFileSystemAPIClient(conn)
 				result, err := ws.GrantAddrFS(context.Background(), &mb.GrantAddrFSRequest{Acctnum: acctNum, FSid: fsNum, Token: token, Addr: c.String("addr")})
@@ -387,8 +319,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "revoke",
-			Usage: "Revoke an Addr's access to a File Systems",
+			Name:      "revoke",
+			Usage:     "Revoke an Addr's access to a File Systems",
+			ArgsUsage: "<region>://<account uuid>/<file system uuid> -addr <IP Address>",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "addr",
@@ -409,22 +342,11 @@ func main() {
 					fmt.Println("addr is required")
 					os.Exit(1)
 				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Println("Invalid url scheme")
+				serverAddr, acctNum, fsNum = parseurl(c.Args().Get(0), "8448")
+				if fsNum == "" {
+					fmt.Println("Missing file system id")
 					os.Exit(1)
 				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8448"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8448"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
-					os.Exit(1)
-				}
-				acctNum = u.Host
-				fsNum = u.Path[1:]
 				conn := setupWS(serverAddr)
 				ws := mb.NewFileSystemAPIClient(conn)
 				result, err := ws.RevokeAddrFS(context.Background(), &mb.RevokeAddrFSRequest{Acctnum: acctNum, FSid: fsNum, Token: token, Addr: c.String("addr")})
@@ -438,8 +360,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "verify",
-			Usage: "Verify an Addr has access to a file system",
+			Name:      "verify",
+			Usage:     "Verify an Addr has access to a file system",
+			ArgsUsage: "<region>://<account uuid>/<file system uuid> -addr <IP Address>",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "addr",
@@ -456,13 +379,7 @@ func main() {
 					fmt.Println("addr is required")
 					os.Exit(1)
 				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Println("Invalid url scheme")
-					os.Exit(1)
-				}
-				fmt.Println(u.Scheme)
-				fsNum = u.Host
+				serverAddr, fsNum, _ = parseurl(c.Args().Get(0), "8448")
 				conn := setupWS(serverAddr)
 				ws := mb.NewFileSystemAPIClient(conn)
 				result, err := ws.LookupAddrFS(context.Background(), &mb.LookupAddrFSRequest{FSid: fsNum, Addr: c.String("addr")})
@@ -476,8 +393,9 @@ func main() {
 			},
 		},
 		{
-			Name:  "mount",
-			Usage: "mount a file system",
+			Name:      "mount",
+			Usage:     "mount a file system",
+			ArgsUsage: "<region>://<file system uuid> <mount point> -o [OPTIONS]",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  "o",
@@ -490,29 +408,8 @@ func main() {
 					fmt.Println("Invalid syntax for revoke.")
 					os.Exit(1)
 				}
-				if c.String("o") == "" {
-					fmt.Println("options are required")
-					os.Exit(1)
-				}
-				u, err := url.Parse(c.Args().Get(0))
-				if err != nil {
-					fmt.Println("Invalid url scheme")
-					os.Exit(1)
-				}
-				fmt.Println(u.Scheme)
-				if u.Scheme == "aio" {
-					serverAddr = "127.0.0.1:8445"
-				} else if u.Scheme == "iad" {
-					serverAddr = "api.ea.iad.rackfs.com:8445"
-				} else {
-					fmt.Printf("Invalid region %s", u.Scheme)
-					os.Exit(1)
-				}
-				if u.Host == "" {
-					fmt.Printf("File System id is required")
-					os.Exit(1)
-				}
-				fsnum, err := uuid.FromString(u.Host)
+				serverAddr, fsNum, _ = parseurl(c.Args().Get(0), "8445")
+				fsnum, err := uuid.FromString(fsNum)
 				if err != nil {
 					fmt.Print("File System id is not valid: ", err)
 				}
@@ -524,16 +421,18 @@ func main() {
 				}
 				fusermountPath()
 				// process file system options
-				clargs := getArgs(c.String("o"))
-				// crapy debug log handling :)
-				if debug, ok := clargs["debug"]; ok {
-					if debug == "false" {
+				if c.String("o") != "" {
+					clargs := getArgs(c.String("o"))
+					// crapy debug log handling :)
+					if debug, ok := clargs["debug"]; ok {
+						if debug == "false" {
+							log.SetFlags(0)
+							log.SetOutput(ioutil.Discard)
+						}
+					} else {
 						log.SetFlags(0)
 						log.SetOutput(ioutil.Discard)
 					}
-				} else {
-					log.SetFlags(0)
-					log.SetOutput(ioutil.Discard)
 				}
 				// Setup grpc
 				var opts []grpc.DialOption
@@ -553,7 +452,7 @@ func main() {
 					fuse.Subtype("cfs"),
 					fuse.LocalVolume(),
 					fuse.VolumeName("CFS"),
-					//fuse.AllowOther(),
+					fuse.AllowOther(),
 					fuse.DefaultPermissions(),
 				)
 				if err != nil {
@@ -642,4 +541,32 @@ func setupWS(svr string) *grpc.ClientConn {
 		log.Fatalf("failed to dial: %v", err)
 	}
 	return conn
+}
+
+// parseurl ...
+func parseurl(urlstr string, port string) (string, string, string) {
+	// a = string of arguments
+	var srv string
+	u, err := url.Parse(urlstr)
+	if err != nil {
+		fmt.Printf("Url parse error: %v\n", err)
+		os.Exit(1)
+	}
+	switch u.Scheme {
+	case "aio":
+		srv = fmt.Sprintf("127.0.0.1:%s", port)
+	case "iad":
+		srv = fmt.Sprintf("api.ea.iad.rackfs.com:%s", port)
+	default:
+		fmt.Printf("Invalid region %s\n", u.Scheme)
+		os.Exit(1)
+	}
+	if u.Host == "" {
+		fmt.Println("Invalid URL no account or file system id")
+		os.Exit(1)
+	}
+	if u.Path != "" {
+		return srv, u.Host, u.Path[1:]
+	}
+	return srv, u.Host, u.Path
 }
