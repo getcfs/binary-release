@@ -7,15 +7,16 @@ import (
 )
 
 type config struct {
-	path               string
-	port               int
-	oortValueSyndicate string
-	oortGroupSyndicate string
-	insecureSkipVerify bool
-	skipMutualTLS      bool
-	nodeId             int
-	metricsAddr        string
-	metricsCollectors  string
+	path                       string
+	port                       int
+	oortValueSyndicate         string
+	oortGroupSyndicate         string
+	insecureSkipVerify         bool
+	skipMutualTLS              bool
+	nodeId                     int
+	metricsAddr                string
+	metricsCollectors          string
+	concurrentRequestsPerStore int
 }
 
 func resolveConfig(c *config) *config {
@@ -64,6 +65,11 @@ func resolveConfig(c *config) *config {
 	}
 	if env := os.Getenv("FORMICD_METRICS_COLLECTORS"); env != "" {
 		cfg.metricsCollectors = env
+	}
+	if env := os.Getenv("FORMICD_CONCURRENT_REQUESTS_PER_STORE"); env != "" {
+		if val, err := strconv.Atoi(env); err == nil {
+			cfg.concurrentRequestsPerStore = val
+		}
 	}
 	return cfg
 }

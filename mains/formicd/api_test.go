@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"bytes"
 	"fmt"
@@ -306,3 +307,4 @@ func TestProtoWriteSize(t *testing.T) {
 	b, _ := proto.Marshal(block)
 	fmt.Printf("Storing 64K and checksum in protobufs takes %d bytes.", len(b))
 }
+*/

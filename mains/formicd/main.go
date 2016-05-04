@@ -111,26 +111,28 @@ func main() {
 	}
 
 	vstore := api.NewReplValueStore(&api.ReplValueStoreConfig{
-		AddressIndex:       2,
-		StoreFTLSConfig:    vtlsConfig,
-		GRPCOpts:           vcOpts,
-		RingServer:         cfg.oortValueSyndicate,
-		RingCachePath:      path.Join(cfg.path, "ring/valuestore.ring"),
-		RingServerGRPCOpts: []grpc.DialOption{vrOpts},
-		RingClientID:       clientID,
+		AddressIndex:               2,
+		StoreFTLSConfig:            vtlsConfig,
+		GRPCOpts:                   vcOpts,
+		RingServer:                 cfg.oortValueSyndicate,
+		RingCachePath:              path.Join(cfg.path, "ring/valuestore.ring"),
+		RingServerGRPCOpts:         []grpc.DialOption{vrOpts},
+		RingClientID:               clientID,
+		ConcurrentRequestsPerStore: cfg.concurrentRequestsPerStore,
 	})
 	if verr := vstore.Startup(context.Background()); verr != nil {
 		grpclog.Fatalln("Cannot start valuestore connector:", verr)
 	}
 
 	gstore := api.NewReplGroupStore(&api.ReplGroupStoreConfig{
-		AddressIndex:       2,
-		StoreFTLSConfig:    gtlsConfig,
-		GRPCOpts:           gcOpts,
-		RingServer:         cfg.oortGroupSyndicate,
-		RingCachePath:      path.Join(cfg.path, "ring/groupstore.ring"),
-		RingServerGRPCOpts: []grpc.DialOption{grOpts},
-		RingClientID:       clientID,
+		AddressIndex:               2,
+		StoreFTLSConfig:            gtlsConfig,
+		GRPCOpts:                   gcOpts,
+		RingServer:                 cfg.oortGroupSyndicate,
+		RingCachePath:              path.Join(cfg.path, "ring/groupstore.ring"),
+		RingServerGRPCOpts:         []grpc.DialOption{grOpts},
+		RingClientID:               clientID,
+		ConcurrentRequestsPerStore: cfg.concurrentRequestsPerStore,
 	})
 	if gerr := gstore.Startup(context.Background()); gerr != nil {
 		grpclog.Fatalln("Cannot start valuestore connector:", gerr)

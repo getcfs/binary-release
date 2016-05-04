@@ -68,11 +68,11 @@
 		},
 		{
 			"ImportPath": "github.com/creiht/formic/flother",
-			"Rev": "a14ab93a7f8ce18ddbf5a866c71d8b65fb08e21e"
+			"Rev": "1a5b45672d7ef5494533a3478ba04393845712d7"
 		},
 		{
 			"ImportPath": "github.com/creiht/formic/proto",
-			"Rev": "a14ab93a7f8ce18ddbf5a866c71d8b65fb08e21e"
+			"Rev": "1a5b45672d7ef5494533a3478ba04393845712d7"
 		},
 		{
 			"ImportPath": "github.com/docker/go-connections/sockets",
@@ -113,7 +113,7 @@
 		},
 		{
 			"ImportPath": "github.com/gholt/store",
-			"Rev": "951ac76058c4417e8503aa290f79ac04c65d0e39"
+			"Rev": "7353bb1b009f1302bc383e655e2b34e15c5a8167"
 		},
 		{
 			"ImportPath": "github.com/go-ole/go-ole",
@@ -180,33 +180,33 @@
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api",
-			"Comment": "qa-0.0.1-147-g4c1785f",
-			"Rev": "4c1785faa0a1ea90dc267e7d29eaad3656ccfe94"
+			"Comment": "qa-0.0.1-150-g1ef102a",
+			"Rev": "1ef102a16eac6560edc3ee1b0f2fcab99a872d10"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api/groupproto",
-			"Comment": "qa-0.0.1-147-g4c1785f",
-			"Rev": "4c1785faa0a1ea90dc267e7d29eaad3656ccfe94"
+			"Comment": "qa-0.0.1-150-g1ef102a",
+			"Rev": "1ef102a16eac6560edc3ee1b0f2fcab99a872d10"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api/proto",
-			"Comment": "qa-0.0.1-147-g4c1785f",
-			"Rev": "4c1785faa0a1ea90dc267e7d29eaad3656ccfe94"
+			"Comment": "qa-0.0.1-150-g1ef102a",
+			"Rev": "1ef102a16eac6560edc3ee1b0f2fcab99a872d10"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api/valueproto",
-			"Comment": "qa-0.0.1-147-g4c1785f",
-			"Rev": "4c1785faa0a1ea90dc267e7d29eaad3656ccfe94"
+			"Comment": "qa-0.0.1-150-g1ef102a",
+			"Rev": "1ef102a16eac6560edc3ee1b0f2fcab99a872d10"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/oort",
-			"Comment": "qa-0.0.1-147-g4c1785f",
-			"Rev": "4c1785faa0a1ea90dc267e7d29eaad3656ccfe94"
+			"Comment": "qa-0.0.1-150-g1ef102a",
+			"Rev": "1ef102a16eac6560edc3ee1b0f2fcab99a872d10"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/oortstore",
-			"Comment": "qa-0.0.1-147-g4c1785f",
-			"Rev": "4c1785faa0a1ea90dc267e7d29eaad3656ccfe94"
+			"Comment": "qa-0.0.1-150-g1ef102a",
+			"Rev": "1ef102a16eac6560edc3ee1b0f2fcab99a872d10"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/syndicate/api/proto",
