@@ -37,7 +37,7 @@ func newfs(c *fuse.Conn, r *rpc, fsid string) *fs {
 func (f *fs) handle(r fuse.Request) {
 	switch r := r.(type) {
 	default:
-		log.Printf("Unhandled request: %v", r)
+		log.Printf("Unhandled request: %s", r)
 		r.RespondError(fuse.ENOSYS)
 
 	case *fuse.GetattrRequest:
@@ -210,7 +210,9 @@ func (f *fs) handleGetattr(r *fuse.GetattrRequest) {
 
 	a, err := f.rpc.api.GetAttr(f.getContext(), &pb.GetAttrRequest{Inode: uint64(r.Node)})
 	if err != nil {
-		log.Fatalf("GetAttr fail: %v", err)
+		log.Printf("GetAttr fail: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	copyAttr(&resp.Attr, a.Attr)
 	// TODO: should we make these configurable?
@@ -229,7 +231,9 @@ func (f *fs) handleLookup(r *fuse.LookupRequest) {
 	l, err := f.rpc.api.Lookup(f.getContext(), &pb.LookupRequest{Name: r.Name, Parent: uint64(r.Node)})
 
 	if err != nil {
-		log.Fatalf("Lookup failed(%s): %v", r.Name, err)
+		log.Printf("Lookup failed(%s): %s", r.Name, err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	// If there is no name then it wasn't found
 	if l.Name != r.Name {
@@ -254,7 +258,9 @@ func (f *fs) handleMkdir(r *fuse.MkdirRequest) {
 
 	m, err := f.rpc.api.MkDir(f.getContext(), &pb.MkDirRequest{Name: r.Name, Parent: uint64(r.Node), Attr: &pb.Attr{Uid: r.Uid, Gid: r.Gid, Mode: uint32(r.Mode)}})
 	if err != nil {
-		log.Fatalf("Mkdir failed(%s): %v", r.Name, err)
+		log.Printf("Mkdir failed(%s): %s", r.Name, err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	// If the name is empty, then the dir already exists
 	if m.Name != r.Name {
@@ -292,7 +298,9 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 			d, err := f.rpc.api.ReadDirAll(f.getContext(), &pb.ReadDirAllRequest{Inode: uint64(r.Node)})
 			log.Println(d)
 			if err != nil {
-				log.Fatalf("Read on dir failed: %v", err)
+				log.Printf("Read on dir failed: %s", err)
+				r.RespondError(fuse.EIO)
+				return
 			}
 			data = fuse.AppendDirent(data, fuse.Dirent{
 				Name:  ".",
@@ -332,7 +340,9 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 			Size:   int64(r.Size),
 		})
 		if err != nil {
-			log.Fatal("Read on file failed: ", err)
+			log.Printf("Read on file failed: %s", err)
+			r.RespondError(fuse.EIO)
+			return
 		}
 		copy(resp.Data, data.Payload)
 		r.Respond(resp)
@@ -348,7 +358,9 @@ func (f *fs) handleWrite(r *fuse.WriteRequest) {
 	resp := &fuse.WriteResponse{}
 	w, err := f.rpc.api.Write(f.getContext(), &pb.WriteRequest{Inode: uint64(r.Node), Offset: r.Offset, Payload: r.Data})
 	if err != nil {
-		log.Fatalf("Write to file failed: %v", err)
+		log.Printf("Write to file failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	if w.Status != 0 {
 		log.Printf("Write status non zero(%d)\n", w.Status)
@@ -363,7 +375,9 @@ func (f *fs) handleCreate(r *fuse.CreateRequest) {
 	resp := &fuse.CreateResponse{}
 	c, err := f.rpc.api.Create(f.getContext(), &pb.CreateRequest{Parent: uint64(r.Node), Name: r.Name, Attr: &pb.Attr{Uid: r.Uid, Gid: r.Gid, Mode: uint32(r.Mode)}})
 	if err != nil {
-		log.Fatalf("Failed to create file: %v", err)
+		log.Printf("Failed to create file: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	resp.Node = fuse.NodeID(c.Attr.Inode)
 	copyAttr(&resp.Attr, c.Attr)
@@ -406,7 +420,9 @@ func (f *fs) handleSetattr(r *fuse.SetattrRequest) {
 	}
 	setAttrResp, err := f.rpc.api.SetAttr(f.getContext(), &pb.SetAttrRequest{Attr: a, Valid: uint32(r.Valid)})
 	if err != nil {
-		log.Fatalf("Setattr failed: %v", err)
+		log.Printf("Setattr failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	copyAttr(&resp.Attr, setAttrResp.Attr)
 	resp.Attr.Valid = 5 * time.Second
@@ -443,7 +459,9 @@ func (f *fs) handleRemove(r *fuse.RemoveRequest) {
 	log.Println(r)
 	_, err := f.rpc.api.Remove(f.getContext(), &pb.RemoveRequest{Parent: uint64(r.Node), Name: r.Name})
 	if err != nil {
-		log.Fatalf("Failed to delete file: %v", err)
+		log.Printf("Failed to delete file: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	r.Respond()
 }
@@ -475,7 +493,9 @@ func (f *fs) handleStatfs(r *fuse.StatfsRequest) {
 	log.Println(r)
 	resp, err := f.rpc.api.Statfs(f.getContext(), &pb.StatfsRequest{})
 	if err != nil {
-		log.Fatalf("Failed to Statfs : %v", err)
+		log.Printf("Failed to Statfs : %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	fuse_resp := &fuse.StatfsResponse{
 		Blocks:  resp.Blocks,
@@ -496,7 +516,9 @@ func (f *fs) handleSymlink(r *fuse.SymlinkRequest) {
 	resp := &fuse.SymlinkResponse{}
 	symlink, err := f.rpc.api.Symlink(f.getContext(), &pb.SymlinkRequest{Parent: uint64(r.Node), Name: r.NewName, Target: r.Target, Uid: r.Uid, Gid: r.Gid})
 	if err != nil {
-		log.Fatalf("Symlink failed: %v", err)
+		log.Printf("Symlink failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	resp.Node = fuse.NodeID(symlink.Attr.Inode)
 	copyAttr(&resp.Attr, symlink.Attr)
@@ -511,7 +533,9 @@ func (f *fs) handleReadlink(r *fuse.ReadlinkRequest) {
 	log.Println(r)
 	resp, err := f.rpc.api.Readlink(f.getContext(), &pb.ReadlinkRequest{Inode: uint64(r.Node)})
 	if err != nil {
-		log.Fatalf("Readlink failed: %v", err)
+		log.Printf("Readlink failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	log.Println(resp)
 	r.Respond(resp.Target)
@@ -539,7 +563,9 @@ func (f *fs) handleGetxattr(r *fuse.GetxattrRequest) {
 	}
 	resp, err := f.rpc.api.Getxattr(f.getContext(), req)
 	if err != nil {
-		log.Fatalf("Getxattr failed: %v", err)
+		log.Printf("Getxattr failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	fuse_resp := &fuse.GetxattrResponse{Xattr: resp.Xattr}
 	log.Println(fuse_resp)
@@ -556,7 +582,9 @@ func (f *fs) handleListxattr(r *fuse.ListxattrRequest) {
 	}
 	resp, err := f.rpc.api.Listxattr(f.getContext(), req)
 	if err != nil {
-		log.Fatalf("Listxattr failed: %v", err)
+		log.Printf("Listxattr failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	fuse_resp := &fuse.ListxattrResponse{Xattr: resp.Xattr}
 	log.Println(fuse_resp)
@@ -575,7 +603,9 @@ func (f *fs) handleSetxattr(r *fuse.SetxattrRequest) {
 	}
 	_, err := f.rpc.api.Setxattr(f.getContext(), req)
 	if err != nil {
-		log.Fatalf("Setxattr failed: %v", err)
+		log.Printf("Setxattr failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	r.Respond()
 }
@@ -589,7 +619,9 @@ func (f *fs) handleRemovexattr(r *fuse.RemovexattrRequest) {
 	}
 	_, err := f.rpc.api.Removexattr(f.getContext(), req)
 	if err != nil {
-		log.Fatalf("Removexattr failed: %v", err)
+		log.Printf("Removexattr failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	r.Respond()
 }
@@ -604,7 +636,9 @@ func (f *fs) handleRename(r *fuse.RenameRequest) {
 	log.Println(r)
 	_, err := f.rpc.api.Rename(f.getContext(), &pb.RenameRequest{OldParent: uint64(r.Node), NewParent: uint64(r.NewDir), OldName: r.OldName, NewName: r.NewName})
 	if err != nil {
-		log.Fatalf("Rename failed: %v", err)
+		log.Printf("Rename failed: %s", err)
+		r.RespondError(fuse.EIO)
+		return
 	}
 	r.Respond()
 }
