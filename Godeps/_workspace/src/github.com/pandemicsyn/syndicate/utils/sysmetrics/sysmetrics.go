@@ -2,6 +2,7 @@ package sysmetrics
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -96,4 +97,23 @@ func LoadCollectors(list string) (map[string]collector.Collector, error) {
 		collectors[name] = c
 	}
 	return collectors, nil
+}
+
+//StartupMetrics fires up the prom metrics interface (on port 9100 by default)
+// it also enables the default system level metrics or those provided in "enabledCollectors"
+func StartupMetrics(listenAddr, enabledCollectors string) {
+	if listenAddr == "" {
+		listenAddr = ":9100"
+	}
+	if enabledCollectors == "" {
+		enabledCollectors = FilterAvailableCollectors(DefaultCollectors)
+	}
+	collectors, err := LoadCollectors(enabledCollectors)
+	if err != nil {
+		log.Fatalf("Couldn't load collectors: %s", err)
+	}
+	nodeCollector := New(collectors)
+	prometheus.MustRegister(nodeCollector)
+	http.Handle("/metrics", prometheus.Handler())
+	go http.ListenAndServe(listenAddr, nil)
 }

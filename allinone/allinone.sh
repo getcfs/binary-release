@@ -160,8 +160,7 @@ echo "Installing cfswrap and setting up the mount command"
 echo "Installing oohhc-acctd, oohhc-filesysd & oohhc-cli"
 go get github.com/letterj/oohhc/oohhc-filesysd
 go install github.com/letterj/oohhc/oohhc-filesysd
-cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-acctd.service /lib/systemd/system
-SUPERKEY=$(python -c "import uuid; print uuid.uuid4()")
+cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-filesysd.service /lib/systemd/system
 # setup keys and certs for oohhc
 mkdir -p /var/lib/oohhc-filesys
 ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-filesys/server.key

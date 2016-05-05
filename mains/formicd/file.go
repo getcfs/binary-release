@@ -54,6 +54,7 @@ type FileService interface {
 }
 
 var ErrStoreHasNewerValue = errors.New("Error store already has newer value")
+var ErrNotFound = errors.New("Not found")
 
 type StoreComms struct {
 	vstore store.ValueStore
@@ -820,7 +821,7 @@ func (o *OortFS) GetChunk(ctx context.Context, id []byte) ([]byte, error) {
 	}
 	b, err := o.comms.ReadValue(ctx, id)
 	if store.IsNotFound(err) {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err

@@ -155,7 +155,6 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 		id := GetID(fsid.Bytes(), r.Inode, block+1) // block 0 is for inode data
 		log.Printf("Reading Inode: %d, Block: %d ID: %d", r.Inode, block, id)
 		chunk, err := s.fs.GetChunk(ctx, id)
-		log.Printf("LEN: %d", len(chunk))
 		if err != nil {
 			log.Print("Err: Failed to read block: ", err)
 			return &pb.ReadResponse{}, err
