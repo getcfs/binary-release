@@ -180,33 +180,33 @@
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api",
-			"Comment": "qa-0.0.1-156-g9aaaad3",
-			"Rev": "9aaaad3079cc89b811e92128f1e08285378fe82a"
+			"Comment": "qa-0.0.1-162-gf442af6",
+			"Rev": "f442af60f08be188105820a528309e0da33488ac"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api/groupproto",
-			"Comment": "qa-0.0.1-156-g9aaaad3",
-			"Rev": "9aaaad3079cc89b811e92128f1e08285378fe82a"
+			"Comment": "qa-0.0.1-162-gf442af6",
+			"Rev": "f442af60f08be188105820a528309e0da33488ac"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api/proto",
-			"Comment": "qa-0.0.1-156-g9aaaad3",
-			"Rev": "9aaaad3079cc89b811e92128f1e08285378fe82a"
+			"Comment": "qa-0.0.1-162-gf442af6",
+			"Rev": "f442af60f08be188105820a528309e0da33488ac"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/api/valueproto",
-			"Comment": "qa-0.0.1-156-g9aaaad3",
-			"Rev": "9aaaad3079cc89b811e92128f1e08285378fe82a"
+			"Comment": "qa-0.0.1-162-gf442af6",
+			"Rev": "f442af60f08be188105820a528309e0da33488ac"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/oort",
-			"Comment": "qa-0.0.1-156-g9aaaad3",
-			"Rev": "9aaaad3079cc89b811e92128f1e08285378fe82a"
+			"Comment": "qa-0.0.1-162-gf442af6",
+			"Rev": "f442af60f08be188105820a528309e0da33488ac"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/oort/oortstore",
-			"Comment": "qa-0.0.1-156-g9aaaad3",
-			"Rev": "9aaaad3079cc89b811e92128f1e08285378fe82a"
+			"Comment": "qa-0.0.1-162-gf442af6",
+			"Rev": "f442af60f08be188105820a528309e0da33488ac"
 		},
 		{
 			"ImportPath": "github.com/pandemicsyn/syndicate/api/proto",
