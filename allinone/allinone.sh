@@ -107,7 +107,7 @@ git clone git@github.com:$GIT_USER/cfs-binary-release.git
 cd cfs-binary-release
 git remote add upstream git@github.com:getcfs/cfs-binary-release.git
 
-echo "Prepping /etc & /var/lib"
+echo "Prepping /etc & /var/lib & /etc/default"
 cd $GOPATH/src/github.com/getcfs/cfs-binary-release
 mkdir -p /etc/syndicate/ring
 mkdir -p /var/lib/oort-value/ring /var/lib/oort-value/data
@@ -119,6 +119,8 @@ ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oort-value/ca.pem
 ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oort-group/server.key
 ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oort-group/server.crt
 ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oort-group/ca.pem
+echo "OORT_VALUE_SYNDICATE_OVERRIDE=127.0.0.1:8443" > /etc/default/oort-valued
+echo "OORT_GROUP_SYNDICATE_OVERRIDE=127.0.0.1:8444" > /etc/default/oort-groupd
 
 echo "Install ring deps"
 go install github.com/gholt/ring/ring

@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
+	"github.com/creiht/formic"
 	"github.com/creiht/formic/flother"
 	pb "github.com/creiht/formic/proto"
 	"github.com/satori/go.uuid"
@@ -46,19 +47,6 @@ func GenerateBlockID(inodeID []byte, block uint64) []byte {
 	return b.Bytes()
 }
 
-func GetID(fsid []byte, inode, block uint64) []byte {
-	// TODO: Figure out what arrangement we want to use for the hash
-	h := murmur3.New128()
-	h.Write(fsid)
-	binary.Write(h, binary.BigEndian, inode)
-	binary.Write(h, binary.BigEndian, block)
-	s1, s2 := h.Sum128()
-	b := bytes.NewBuffer([]byte(""))
-	binary.Write(b, binary.BigEndian, s1)
-	binary.Write(b, binary.BigEndian, s2)
-	return b.Bytes()
-}
-
 func GetFsId(ctx context.Context) (uuid.UUID, error) {
 	md, ok := metadata.FromContext(ctx)
 	if !ok {
@@ -81,7 +69,7 @@ func (s *apiServer) GetAttr(ctx context.Context, r *pb.GetAttrRequest) (*pb.GetA
 	if err != nil {
 		return nil, err
 	}
-	attr, err := s.fs.GetAttr(ctx, GetID(fsid.Bytes(), r.Inode, 0))
+	attr, err := s.fs.GetAttr(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0))
 	return &pb.GetAttrResponse{Attr: attr}, err
 }
 
@@ -90,7 +78,7 @@ func (s *apiServer) SetAttr(ctx context.Context, r *pb.SetAttrRequest) (*pb.SetA
 	if err != nil {
 		return nil, err
 	}
-	attr, err := s.fs.SetAttr(ctx, GetID(fsid.Bytes(), r.Attr.Inode, 0), r.Attr, r.Valid)
+	attr, err := s.fs.SetAttr(ctx, formic.GetID(fsid.Bytes(), r.Attr.Inode, 0), r.Attr, r.Valid)
 	return &pb.SetAttrResponse{Attr: attr}, err
 }
 
@@ -111,7 +99,7 @@ func (s *apiServer) Create(ctx context.Context, r *pb.CreateRequest) (*pb.Create
 		Uid:    r.Attr.Uid,
 		Gid:    r.Attr.Gid,
 	}
-	rname, rattr, err := s.fs.Create(ctx, GetID(fsid.Bytes(), r.Parent, 0), GetID(fsid.Bytes(), inode, 0), inode, r.Name, attr, false)
+	rname, rattr, err := s.fs.Create(ctx, formic.GetID(fsid.Bytes(), r.Parent, 0), formic.GetID(fsid.Bytes(), inode, 0), inode, r.Name, attr, false)
 	return &pb.CreateResponse{Name: rname, Attr: rattr}, err
 }
 
@@ -132,7 +120,7 @@ func (s *apiServer) MkDir(ctx context.Context, r *pb.MkDirRequest) (*pb.MkDirRes
 		Uid:    r.Attr.Uid,
 		Gid:    r.Attr.Gid,
 	}
-	rname, rattr, err := s.fs.Create(ctx, GetID(fsid.Bytes(), r.Parent, 0), GetID(fsid.Bytes(), inode, 0), inode, r.Name, attr, true)
+	rname, rattr, err := s.fs.Create(ctx, formic.GetID(fsid.Bytes(), r.Parent, 0), formic.GetID(fsid.Bytes(), inode, 0), inode, r.Name, attr, true)
 	return &pb.MkDirResponse{Name: rname, Attr: rattr}, err
 }
 
@@ -152,7 +140,7 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 	}
 	cur := int64(0)
 	for cur < r.Size {
-		id := GetID(fsid.Bytes(), r.Inode, block+1) // block 0 is for inode data
+		id := formic.GetID(fsid.Bytes(), r.Inode, block+1) // block 0 is for inode data
 		log.Printf("Reading Inode: %d, Block: %d ID: %d", r.Inode, block, id)
 		chunk, err := s.fs.GetChunk(ctx, id)
 		if err != nil {
@@ -204,7 +192,7 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 			sendSize = s.blocksize - firstOffset
 		}
 		payload := r.Payload[cur : cur+sendSize]
-		id := GetID(fsid.Bytes(), r.Inode, block+1) // 0 block is for inode data
+		id := formic.GetID(fsid.Bytes(), r.Inode, block+1) // 0 block is for inode data
 		if firstOffset > 0 || sendSize < s.blocksize {
 			// need to get the block and update
 			chunk := make([]byte, firstOffset+int64(len(payload)))
@@ -230,7 +218,7 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 		if err != nil {
 			return &pb.WriteResponse{Status: 1}, err
 		}
-		err = s.fs.Update(ctx, GetID(fsid.Bytes(), r.Inode, 0), block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
+		err = s.fs.Update(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
 		if err != nil {
 			return &pb.WriteResponse{Status: 1}, err
 		}
@@ -245,7 +233,7 @@ func (s *apiServer) Lookup(ctx context.Context, r *pb.LookupRequest) (*pb.Lookup
 	if err != nil {
 		return nil, err
 	}
-	name, attr, err := s.fs.Lookup(ctx, GetID(fsid.Bytes(), r.Parent, 0), r.Name)
+	name, attr, err := s.fs.Lookup(ctx, formic.GetID(fsid.Bytes(), r.Parent, 0), r.Name)
 	return &pb.LookupResponse{Name: name, Attr: attr}, err
 }
 
@@ -254,7 +242,7 @@ func (s *apiServer) ReadDirAll(ctx context.Context, n *pb.ReadDirAllRequest) (*p
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.ReadDirAll(ctx, GetID(fsid.Bytes(), n.Inode, 0))
+	return s.fs.ReadDirAll(ctx, formic.GetID(fsid.Bytes(), n.Inode, 0))
 }
 
 func (s *apiServer) Remove(ctx context.Context, r *pb.RemoveRequest) (*pb.RemoveResponse, error) {
@@ -262,7 +250,7 @@ func (s *apiServer) Remove(ctx context.Context, r *pb.RemoveRequest) (*pb.Remove
 	if err != nil {
 		return nil, err
 	}
-	status, err := s.fs.Remove(ctx, GetID(fsid.Bytes(), r.Parent, 0), r.Name)
+	status, err := s.fs.Remove(ctx, formic.GetID(fsid.Bytes(), r.Parent, 0), r.Name)
 	return &pb.RemoveResponse{Status: status}, err
 }
 
@@ -284,7 +272,7 @@ func (s *apiServer) Symlink(ctx context.Context, r *pb.SymlinkRequest) (*pb.Syml
 		Uid:    r.Uid,
 		Gid:    r.Gid,
 	}
-	return s.fs.Symlink(ctx, GetID(fsid.Bytes(), r.Parent, 0), GetID(fsid.Bytes(), inode, 0), r.Name, r.Target, attr, inode)
+	return s.fs.Symlink(ctx, formic.GetID(fsid.Bytes(), r.Parent, 0), formic.GetID(fsid.Bytes(), inode, 0), r.Name, r.Target, attr, inode)
 }
 
 func (s *apiServer) Readlink(ctx context.Context, r *pb.ReadlinkRequest) (*pb.ReadlinkResponse, error) {
@@ -292,7 +280,7 @@ func (s *apiServer) Readlink(ctx context.Context, r *pb.ReadlinkRequest) (*pb.Re
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.Readlink(ctx, GetID(fsid.Bytes(), r.Inode, 0))
+	return s.fs.Readlink(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0))
 }
 
 func (s *apiServer) Getxattr(ctx context.Context, r *pb.GetxattrRequest) (*pb.GetxattrResponse, error) {
@@ -300,7 +288,7 @@ func (s *apiServer) Getxattr(ctx context.Context, r *pb.GetxattrRequest) (*pb.Ge
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.Getxattr(ctx, GetID(fsid.Bytes(), r.Inode, 0), r.Name)
+	return s.fs.Getxattr(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), r.Name)
 }
 
 func (s *apiServer) Setxattr(ctx context.Context, r *pb.SetxattrRequest) (*pb.SetxattrResponse, error) {
@@ -308,7 +296,7 @@ func (s *apiServer) Setxattr(ctx context.Context, r *pb.SetxattrRequest) (*pb.Se
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.Setxattr(ctx, GetID(fsid.Bytes(), r.Inode, 0), r.Name, r.Value)
+	return s.fs.Setxattr(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), r.Name, r.Value)
 }
 
 func (s *apiServer) Listxattr(ctx context.Context, r *pb.ListxattrRequest) (*pb.ListxattrResponse, error) {
@@ -316,7 +304,7 @@ func (s *apiServer) Listxattr(ctx context.Context, r *pb.ListxattrRequest) (*pb.
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.Listxattr(ctx, GetID(fsid.Bytes(), r.Inode, 0))
+	return s.fs.Listxattr(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0))
 }
 
 func (s *apiServer) Removexattr(ctx context.Context, r *pb.RemovexattrRequest) (*pb.RemovexattrResponse, error) {
@@ -324,7 +312,7 @@ func (s *apiServer) Removexattr(ctx context.Context, r *pb.RemovexattrRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.Removexattr(ctx, GetID(fsid.Bytes(), r.Inode, 0), r.Name)
+	return s.fs.Removexattr(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), r.Name)
 }
 
 func (s *apiServer) Rename(ctx context.Context, r *pb.RenameRequest) (*pb.RenameResponse, error) {
@@ -332,7 +320,7 @@ func (s *apiServer) Rename(ctx context.Context, r *pb.RenameRequest) (*pb.Rename
 	if err != nil {
 		return nil, err
 	}
-	return s.fs.Rename(ctx, GetID(fsid.Bytes(), r.OldParent, 0), GetID(fsid.Bytes(), r.NewParent, 0), r.OldName, r.NewName)
+	return s.fs.Rename(ctx, formic.GetID(fsid.Bytes(), r.OldParent, 0), formic.GetID(fsid.Bytes(), r.NewParent, 0), r.OldName, r.NewName)
 }
 
 func (s *apiServer) Statfs(ctx context.Context, r *pb.StatfsRequest) (*pb.StatfsResponse, error) {

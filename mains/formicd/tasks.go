@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/grpc/peer"
 
+	"github.com/creiht/formic"
 	"github.com/gholt/store"
 
 	"golang.org/x/net/context"
@@ -66,7 +67,7 @@ func (d *Deletinator) run() {
 		for b := uint64(0); b < ts.Blocks; b++ {
 			log.Println("  Deleting block: ", b)
 			// Delete each block
-			id := GetID(ts.FsId, ts.Inode, b+1)
+			id := formic.GetID(ts.FsId, ts.Inode, b+1)
 			err := d.fs.DeleteChunk(ctx, id, ts.Dtime)
 			if err != nil && !store.IsNotFound(err) && err != ErrStoreHasNewerValue {
 				continue
@@ -76,7 +77,7 @@ func (d *Deletinator) run() {
 		if deleted == ts.Blocks {
 			// Everything is deleted so delete the entry
 			log.Println("  Deleting Inode")
-			err := d.fs.DeleteChunk(ctx, GetID(ts.FsId, ts.Inode, 0), ts.Dtime)
+			err := d.fs.DeleteChunk(ctx, formic.GetID(ts.FsId, ts.Inode, 0), ts.Dtime)
 			if err != nil && !store.IsNotFound(err) && err != ErrStoreHasNewerValue {
 				// Couldn't delete the inode entry so try again later
 				d.in <- todelete

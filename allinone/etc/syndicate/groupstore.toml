@@ -14,6 +14,7 @@ CertFile = "/var/lib/oort-group/server.crt"
 KeyFile = "/var/lib/oort-group/server.key"
 CAFile = "/var/lib/oort-group/ca.pem"
 MutualTLS = true
+MetricsAddr = ":9300"
 
 [GroupStoreConfig]
 Scale = 0.1

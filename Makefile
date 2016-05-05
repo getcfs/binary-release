@@ -27,7 +27,6 @@ build:
 	mkdir -p $(BUILDPATH)
 	godep go build -i -v -o build/oort-cli github.com/getcfs/cfs-binary-release/mains/oort-cli
 	godep go build -i -v -o build/oort-bench github.com/getcfs/cfs-binary-release/mains/oort-bench
-	godep go build -i -v -o build/oort-groupd github.com/getcfs/cfs-binary-release/mains/oort-groupd
 	godep go build -i -v -o build/oort-valued --ldflags " \
 			-X main.ringVersion=$(shell git -C $$GOPATH/src/github.com/gholt/ring rev-parse HEAD) \
 			-X main.oortVersion=$(VERSION) \
@@ -54,7 +53,6 @@ build:
 			-X main.buildDate=$(shell date -u +%Y-%m-%d.%H:%M:%S)" github.com/getcfs/cfs-binary-release/mains/syndicate-client
 	godep go build -i -v -o build/cfsdvp github.com/getcfs/cfs-binary-release/mains/cfsdvp
 	godep go build -i -v -o build/cfs github.com/getcfs/cfs-binary-release/mains/cfs
-	godep go build -i -v -o build/formicd github.com/getcfs/cfs-binary-release/mains/formicd
 	godep go build -i -v -o build/formicd --ldflags " \
 			-X main.formicdVersion=$(VERSION) \
 			-X main.goVersion=$(shell go version | sed -e 's/ /-/g') \
@@ -78,27 +76,27 @@ release: install
 	ghr -t $(GITHUB_TOKEN) -u $(GITHUB_USER) --replace $(VERSION) $(BUILDPATH)
 
 oort-cli:
-	cp -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-cli $(SRCPATH)
-	cp -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-bench $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-cli $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-bench $(SRCPATH)
 
 oort-value:
-	cp -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-valued $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-valued $(SRCPATH)
 
 oort-group:
-	cp -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-groupd $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/pandemicsyn/oort/oort-groupd $(SRCPATH)
 
 syndicate:
-	cp -av $(OGOPATH)/src/github.com/pandemicsyn/syndicate/synd $(SRCPATH)
-	cp -av $(OGOPATH)/src/github.com/pandemicsyn/syndicate/syndicate-client $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/pandemicsyn/syndicate/synd $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/pandemicsyn/syndicate/syndicate-client $(SRCPATH)
 
 cfsdvp:
-	cp -av $(OGOPATH)/src/github.com/creiht/formic/cfsdvp $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/creiht/formic/cfsdvp $(SRCPATH)
 
 cfs:
-	cp -av $(OGOPATH)/src/github.com/creiht/formic/cfs $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/creiht/formic/cfs $(SRCPATH)
 
 formic:
-	cp -av $(OGOPATH)/src/github.com/creiht/formic/formicd $(SRCPATH)
+	rsync -a --delete $(OGOPATH)/src/github.com/creiht/formic/formicd $(SRCPATH)
 
 oohhc-filesysd:
-	cp -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-filesysd $(SRCPATH)
+	rsync --delete -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-filesysd $(SRCPATH)

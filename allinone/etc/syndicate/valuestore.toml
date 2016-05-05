@@ -14,6 +14,7 @@ CertFile = "/var/lib/oort-value/server.crt"
 KeyFile = "/var/lib/oort-value/server.key"
 CAFile = "/var/lib/oort-value/ca.pem"
 MutualTLS = true
+MetricsAddr = ":9200"
 
 [ValueStoreConfig]
 Scale = 0.1
