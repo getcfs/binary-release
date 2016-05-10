@@ -474,12 +474,6 @@ func (o *OortFS) ReadDirAll(ctx context.Context, id []byte) (*pb.ReadDirAllRespo
 	e := &pb.ReadDirAllResponse{}
 	dirent := &pb.DirEntry{}
 	for _, item := range items {
-		// lookup the item in the group to get the id
-		if err != nil {
-			// TODO: Needs beter error handling
-			log.Println("Error with lookup: ", err)
-			continue
-		}
 		err = proto.Unmarshal(item.Value, dirent)
 		if err != nil {
 			return &pb.ReadDirAllResponse{}, err
@@ -493,8 +487,15 @@ func (o *OortFS) ReadDirAll(ctx context.Context, id []byte) (*pb.ReadDirAllRespo
 		if err != nil {
 			continue
 		}
+		if len(b) == 0 {
+			// If we get an empty value, skip for now
+			// TODO: Figure out how we should handle this
+			log.Printf("ERR: Received an empty chunk for id %v", dirent.Id)
+			continue
+		}
 		n := &pb.InodeEntry{}
 		err = proto.Unmarshal(b, n)
+		log.Printf("Unmarshaled Inode(%d): %v", dirent.Id, n)
 		if err != nil {
 			continue
 		}

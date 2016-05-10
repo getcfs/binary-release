@@ -17,6 +17,7 @@ type CmdCtrl interface {
 	Reload() (err error)
 	Restart() (err error)
 	RingUpdate(version int64, ringBytes []byte) (newversion int64)
+	SelfUpgrade(version string, bindiff []byte, hash []byte) (status bool, msg string)
 	Stats() (encoded []byte)
 	HealthCheck() (status bool, msg string)
 }
@@ -63,7 +64,6 @@ func (cc *CCServer) RingUpdate(c context.Context, r *pb.Ring) (*pb.RingUpdateRes
 	res := pb.RingUpdateResult{}
 	res.Newversion = cc.cmdctrl.RingUpdate(r.Version, r.Ring)
 	return &res, nil
-
 }
 
 func (cc *CCServer) Start(c context.Context, r *pb.EmptyMsg) (*pb.StatusMsg, error) {
@@ -114,4 +114,10 @@ func (cc *CCServer) HealthCheck(c context.Context, r *pb.EmptyMsg) (*pb.HealthCh
 	hm := &pb.HealthCheckMsg{Ts: time.Now().Unix()}
 	hm.Status, hm.Msg = cc.cmdctrl.HealthCheck()
 	return hm, nil
+}
+
+func (cc *CCServer) SelfUpgrade(c context.Context, r *pb.SelfUpgradeMsg) (*pb.StatusMsg, error) {
+	sm := &pb.StatusMsg{}
+	sm.Status, sm.Msg = cc.cmdctrl.SelfUpgrade(r.Version, r.Bindiff, r.Checksum)
+	return sm, nil
 }

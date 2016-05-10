@@ -99,6 +99,7 @@ start <cmdctrladdress> #attempts to start the remote nodes backend
 stop <cmdctrladdress> #attempts to stop the remote nodes backend
 restart <cmdctrladdress> #attempts to restart the remote nodes backend
 exit <cmdctrladdress> #attempts to exit the remote node
+upgrade <cmdctrladdress> <github version string> #asks the node to upgrade itself
 version			#print version
 config          #print ring config
 config <nodeid> #uses uint64 id
@@ -179,15 +180,15 @@ func (s *SyndClient) mainEntry(args []string) error {
 			return err
 		}
 		return c.exitNodeCmd()
-	case "stats":
-		if len(args) != 2 {
+	case "upgrade":
+		if len(args) != 3 {
 			return helpCmd()
 		}
 		c, err := NewCmdCtrlClient(args[1])
 		if err != nil {
 			return err
 		}
-		return c.statsNodeCmd()
+		return c.upgradeNodeCmd(args[2])
 	case "ringupdate":
 		if len(args) != 3 {
 			return helpCmd()
@@ -302,6 +303,16 @@ func (s *SyndClient) mainEntry(args []string) error {
 	return helpCmd()
 }
 
+func (s *CmdCtrlClient) upgradeNodeCmd(version string) error {
+	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	status, err := s.client.SelfUpgrade(ctx, &cc.SelfUpgradeMsg{Version: version})
+	if err != nil {
+		return err
+	}
+	fmt.Println("Upgraded:", status.Status, " Msg:", status.Msg)
+	return nil
+}
+
 func (s *CmdCtrlClient) startNodeCmd() error {
 	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 	status, err := s.client.Start(ctx, &cc.EmptyMsg{})
@@ -339,16 +350,6 @@ func (s *CmdCtrlClient) exitNodeCmd() error {
 		return err
 	}
 	fmt.Println("Stopped:", status.Status, " Msg:", status.Msg)
-	return nil
-}
-
-func (s *CmdCtrlClient) statsNodeCmd() error {
-	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
-	status, err := s.client.Stats(ctx, &cc.EmptyMsg{})
-	if err != nil {
-		return err
-	}
-	fmt.Printf("%s\n", status.Statsjson)
 	return nil
 }
 

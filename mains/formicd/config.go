@@ -17,6 +17,7 @@ type config struct {
 	metricsAddr                string
 	metricsCollectors          string
 	concurrentRequestsPerStore int
+	debug                      bool
 }
 
 func resolveConfig(c *config) *config {
@@ -70,6 +71,9 @@ func resolveConfig(c *config) *config {
 		if val, err := strconv.Atoi(env); err == nil {
 			cfg.concurrentRequestsPerStore = val
 		}
+	}
+	if env := os.Getenv("FORMICD_DEBUG"); env != "true" {
+		cfg.debug = true
 	}
 	return cfg
 }

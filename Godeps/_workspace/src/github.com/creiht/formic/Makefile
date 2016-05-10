@@ -15,7 +15,6 @@ build:
 		-X main.formicdVersion=$(shell git rev-parse HEAD) \
 		-X main.goVersion=$(shell go version | sed -e 's/ /-/g') \
 		-X main.buildDate=$(shell date -u +%Y-%m-%d.%H:%M:%S)" github.com/creiht/formic/formicd
-	go build -i -v -o packaging/root/usr/local/bin/cfswrap github.com/creiht/formic/cfswrap
 
 darwin: export GOOS=darwin
 darwin:

@@ -31,6 +31,7 @@ source /$USER/.bashrc
 if [ "$FANCYVIM" = "yes" ]; then
     echo "Performing fancy vim install"
     apt-get install vim-nox -y --force-yes
+    update-alternatives --set editor /usr/bin/vim.nox
     mkdir -p ~/.vim/autoload ~/.vim/bundle && curl -LSso ~/.vim/autoload/pathogen.vim https://tpo.pe/pathogen.vim
     go get golang.org/x/tools/cmd/goimports
     git clone https://github.com/fatih/vim-go.git ~/.vim/bundle/vim-go

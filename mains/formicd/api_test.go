@@ -1,15 +1,19 @@
 package main
 
-/*
 import (
 	"bytes"
 	"fmt"
 	"testing"
+	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	"golang.org/x/net/context"
 
+	"github.com/creiht/formic"
 	pb "github.com/creiht/formic/proto"
 	"github.com/gogo/protobuf/proto"
+	"github.com/satori/go.uuid"
 )
 
 // Minimal FileService for testing
@@ -25,6 +29,18 @@ func NewTestFS() *TestFS {
 	}
 }
 
+func (fs *TestFS) InitFs(ctx context.Context, fsid []byte) error {
+	return nil
+}
+
+func (fs *TestFS) GetDirent(ctx context.Context, parent []byte, name string) (*pb.DirEntry, error) {
+	return nil, nil
+}
+
+func (fs *TestFS) GetInode(ctx context.Context, id []byte) (*pb.InodeEntry, error) {
+	return nil, nil
+}
+
 func (fs *TestFS) GetChunk(ctx context.Context, id []byte) ([]byte, error) {
 	if len(fs.reads) > 0 {
 		chunk := fs.reads[0]
@@ -37,6 +53,14 @@ func (fs *TestFS) GetChunk(ctx context.Context, id []byte) ([]byte, error) {
 
 func (fs *TestFS) WriteChunk(ctx context.Context, id, data []byte) error {
 	fs.writes = append(fs.writes, data)
+	return nil
+}
+
+func (fs *TestFS) DeleteChunk(ctx context.Context, id []byte, tsm int64) error {
+	return nil
+}
+
+func (fs *TestFS) DeleteListing(ctx context.Context, parent []byte, name string, tsm int64) error {
 	return nil
 }
 
@@ -103,21 +127,32 @@ func (ds *TestFS) Removexattr(ctx context.Context, id []byte, name string) (*pb.
 func (ds *TestFS) Rename(ctx context.Context, oldParent, newParent []byte, oldName, newName string) (*pb.RenameResponse, error) {
 	return &pb.RenameResponse{}, nil
 }
+
+func getContext() context.Context {
+	fsid := uuid.NewV4()
+	c, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	c = metadata.NewContext(
+		c,
+		metadata.Pairs("fsid", fsid.String()),
+	)
+	return c
+}
+
 func TestGetID(t *testing.T) {
-	id1 := GetID(uint64(11), uint64(1), uint64(1), uint64(1))
-	id2 := GetID(uint64(11), uint64(1), uint64(1), uint64(1))
+	id1 := formic.GetID([]byte("1"), uint64(1), uint64(1))
+	id2 := formic.GetID([]byte("1"), uint64(1), uint64(1))
 	if !bytes.Equal(id1, id2) {
 		t.Errorf("Generated IDs not equal")
 	}
-	id3 := GetID(uint64(11), uint64(1), uint64(1), uint64(2))
+	id3 := formic.GetID([]byte("1"), uint64(1), uint64(2))
 	if bytes.Equal(id1, id3) {
 		t.Errorf("Generated IDs were equal")
 	}
 }
 
 func TestCreate(t *testing.T) {
-	api := NewApiServer(NewTestFS())
-	_, err := api.Create(context.Background(), &pb.CreateRequest{Parent: 1, Name: "Test", Attr: &pb.Attr{Gid: 1001, Uid: 1001}})
+	api := NewApiServer(NewTestFS(), 1)
+	_, err := api.Create(getContext(), &pb.CreateRequest{Parent: 1, Name: "Test", Attr: &pb.Attr{Gid: 1001, Uid: 1001}})
 	if err != nil {
 		t.Error("Create Failed: ", err)
 	}
@@ -126,14 +161,14 @@ func TestCreate(t *testing.T) {
 
 func TestWrite_Basic(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 10
 	chunk := pb.WriteRequest{
 		Inode:   0,
 		Offset:  0,
 		Payload: []byte("1234567890"),
 	}
-	r, err := api.Write(context.Background(), &chunk)
+	r, err := api.Write(getContext(), &chunk)
 	if err != nil {
 		t.Error("Write Failed: ", err)
 	}
@@ -146,7 +181,7 @@ func TestWrite_Basic(t *testing.T) {
 	}
 	chunk.Payload = []byte("1")
 	fs.clearwrites()
-	r, err = api.Write(context.Background(), &chunk)
+	r, err = api.Write(getContext(), &chunk)
 	if err != nil {
 		t.Error("Write Failed: ", err)
 	}
@@ -162,14 +197,14 @@ func TestWrite_Basic(t *testing.T) {
 
 func TestWrite_Chunk(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 5
 	chunk := pb.WriteRequest{
 		Inode:   0,
 		Offset:  0,
 		Payload: []byte("1234567890"),
 	}
-	r, err := api.Write(context.Background(), &chunk)
+	r, err := api.Write(getContext(), &chunk)
 	if err != nil {
 		t.Error("Write Failed: ", err)
 	}
@@ -188,14 +223,14 @@ func TestWrite_Chunk(t *testing.T) {
 
 func TestWrite_Offset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 10
 	chunk := pb.WriteRequest{
 		Offset:  5,
 		Payload: []byte("12345"),
 		Inode:   0,
 	}
-	r, err := api.Write(context.Background(), &chunk)
+	r, err := api.Write(getContext(), &chunk)
 	if err != nil {
 		t.Error("Write Failed: ", err)
 	}
@@ -212,7 +247,7 @@ func TestWrite_Offset(t *testing.T) {
 		Payload: []byte("12345"),
 		Inode:   0,
 	}
-	r, err = api.Write(context.Background(), &chunk)
+	r, err = api.Write(getContext(), &chunk)
 	if err != nil {
 		t.Error("Write Failed: ", err)
 	}
@@ -228,14 +263,14 @@ func TestWrite_Offset(t *testing.T) {
 
 func TestWrite_MultiOffset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 20
 	chunk := pb.WriteRequest{
 		Offset:  5,
 		Payload: []byte("12345"),
 		Inode:   0,
 	}
-	r, err := api.Write(context.Background(), &chunk)
+	r, err := api.Write(getContext(), &chunk)
 	if err != nil {
 		t.Error("Write Failed: ", err)
 	}
@@ -250,11 +285,11 @@ func TestWrite_MultiOffset(t *testing.T) {
 
 func TestRead_Basic(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 10
 	write := []byte("0123456789")
 	fs.addread(write)
-	data, err := api.Read(context.Background(), &pb.ReadRequest{Inode: 0, Offset: 0, Size: 10})
+	data, err := api.Read(getContext(), &pb.ReadRequest{Inode: 0, Offset: 0, Size: 10})
 	if err != nil {
 		t.Error("Read Failed: ", err)
 	}
@@ -265,11 +300,11 @@ func TestRead_Basic(t *testing.T) {
 
 func TestRead_Offset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 10
 	write := []byte("0123456789")
 	fs.addread(write)
-	data, err := api.Read(context.Background(), &pb.ReadRequest{Inode: 0, Offset: 5, Size: 5})
+	data, err := api.Read(getContext(), &pb.ReadRequest{Inode: 0, Offset: 5, Size: 5})
 	if err != nil {
 		t.Error("Read Failed: ", err)
 	}
@@ -280,13 +315,13 @@ func TestRead_Offset(t *testing.T) {
 
 func TestRead_Chunk(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs)
+	api := NewApiServer(fs, 1)
 	api.blocksize = 10
 	write1 := []byte("0123456789")
 	write2 := []byte("9876543210")
 	fs.addread(write1)
 	fs.addread(write2)
-	data, err := api.Read(context.Background(), &pb.ReadRequest{Inode: 0, Offset: 0, Size: 20})
+	data, err := api.Read(getContext(), &pb.ReadRequest{Inode: 0, Offset: 0, Size: 20})
 	if err != nil {
 		t.Error("Read Failed: ", err)
 	}
@@ -307,4 +342,3 @@ func TestProtoWriteSize(t *testing.T) {
 	b, _ := proto.Marshal(block)
 	fmt.Printf("Storing 64K and checksum in protobufs takes %d bytes.", len(b))
 }
-*/
