@@ -3,6 +3,7 @@ package cmdctrl
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/inconshreveable/go-update"
@@ -20,6 +21,7 @@ func NewGithubUpdater(repo, org, binName, target, canaryFile, currentVersion str
 }
 
 type GithubUpdater struct {
+	sync.RWMutex
 	repo       string
 	org        string
 	binName    string
@@ -47,7 +49,10 @@ func (g *GithubUpdater) CanaryCheck() error {
 	return nil
 }
 
+//Upgrade to a new version
 func (g *GithubUpdater) Upgrade(version string) error {
+	g.Lock()
+	defer g.Unlock()
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", g.org, g.repo, version, g.binName)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -67,7 +72,10 @@ func (g *GithubUpdater) Upgrade(version string) error {
 	return err
 }
 
+//Downgrade technically identical to upgrade
 func (g *GithubUpdater) Downgrade(version string) error {
+	g.Lock()
+	defer g.Unlock()
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", g.org, g.repo, version, g.binName)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -85,4 +93,11 @@ func (g *GithubUpdater) Downgrade(version string) error {
 		}
 	}
 	return err
+}
+
+//GetCurrentVersion returns the current version string
+func (g *GithubUpdater) GetCurrentVersion() string {
+	g.RLock()
+	defer g.RUnlock()
+	return g.version
 }

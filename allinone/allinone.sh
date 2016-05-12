@@ -158,7 +158,12 @@ go get github.com/creiht/formic/cfs
 go install github.com/creiht/formic/cfs
 cp -av $GOPATH/src/github.com/creiht/formic/packaging/root/usr/share/formicd/systemd/formicd.service /lib/systemd/system
 TENDOT=$(ifconfig | awk -F "[: ]+" '/inet addr:/ { if ($4 != "127.0.0.1") print $4 }' | egrep "^10\.")
-echo "Installing cfswrap and setting up the mount command"
+mkdir -p /var/lib/formic
+ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/formic/server.key
+ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/formic/server.crt
+ln -s /etc/syndicate/cfssl/ca.pem /var/lib/formic/ca.pem
+ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/formic/client.key
+ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/formic/client.crt
 
 echo "Installing oohhc-acctd, oohhc-filesysd & oohhc-cli"
 go get github.com/letterj/oohhc/oohhc-filesysd
