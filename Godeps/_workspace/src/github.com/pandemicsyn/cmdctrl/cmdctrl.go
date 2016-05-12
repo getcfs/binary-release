@@ -20,6 +20,7 @@ type CmdCtrl interface {
 	SelfUpgrade(version string, bindiff []byte, hash []byte) (status bool, msg string)
 	Stats() (encoded []byte)
 	HealthCheck() (status bool, msg string)
+	SoftwareVersion() (version string)
 }
 
 type CCServer struct {
@@ -42,21 +43,21 @@ func NewCCServer(c CmdCtrl, cfg *ConfigOpts) *CCServer {
 	}
 }
 
-func (c *CCServer) Serve() error {
-	l, err := net.Listen("tcp", c.cfg.ListenAddress)
+func (cc *CCServer) Serve() error {
+	l, err := net.Listen("tcp", cc.cfg.ListenAddress)
 	if err != nil {
 		return err
 	}
 	var opts []grpc.ServerOption
-	if c.cfg.UseTLS {
-		creds, err := credentials.NewServerTLSFromFile(c.cfg.CertFile, c.cfg.KeyFile)
+	if cc.cfg.UseTLS {
+		creds, err := credentials.NewServerTLSFromFile(cc.cfg.CertFile, cc.cfg.KeyFile)
 		if err != nil {
 			return err
 		}
 		opts = []grpc.ServerOption{grpc.Creds(creds)}
 	}
 	s := grpc.NewServer(opts...)
-	pb.RegisterCmdCtrlServer(s, c)
+	pb.RegisterCmdCtrlServer(s, cc)
 	return s.Serve(l)
 }
 
@@ -116,8 +117,14 @@ func (cc *CCServer) HealthCheck(c context.Context, r *pb.EmptyMsg) (*pb.HealthCh
 	return hm, nil
 }
 
+//SelfUpgrade will have the instance upgrade to the provided version via the cmdctrl.GithubUpdater
 func (cc *CCServer) SelfUpgrade(c context.Context, r *pb.SelfUpgradeMsg) (*pb.StatusMsg, error) {
 	sm := &pb.StatusMsg{}
 	sm.Status, sm.Msg = cc.cmdctrl.SelfUpgrade(r.Version, r.Bindiff, r.Checksum)
 	return sm, nil
+}
+
+//SoftwareVersion returns the currently running version
+func (cc *CCServer) SoftwareVersion(c context.Context, r *pb.EmptyMsg) (*pb.SoftwareVersionMsg, error) {
+	return &pb.SoftwareVersionMsg{Version: cc.cmdctrl.SoftwareVersion()}, nil
 }

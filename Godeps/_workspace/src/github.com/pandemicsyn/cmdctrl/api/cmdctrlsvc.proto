@@ -12,6 +12,7 @@ service CmdCtrl {
     rpc Stats(EmptyMsg) returns (StatsMsg) {}
     rpc HealthCheck(EmptyMsg) returns (HealthCheckMsg) {}
     rpc SelfUpgrade(SelfUpgradeMsg) returns (StatusMsg) {}
+    rpc SoftwareVersion(EmptyMsg) returns (SoftwareVersionMsg) {}
 }
 
 message RingUpdateResult {
@@ -44,4 +45,8 @@ message SelfUpgradeMsg {
     string version = 1;
     bytes  bindiff = 2;
     bytes  checksum = 3;
+}
+
+message SoftwareVersionMsg {
+    string version = 1;
 }

@@ -21,9 +21,10 @@ import (
 
 type apiServer struct {
 	sync.RWMutex
-	fs        FileService
-	fl        *flother.Flother
-	blocksize int64
+	fs         FileService
+	fl         *flother.Flother
+	blocksize  int64
+	updateChan chan *UpdateItem
 }
 
 func NewApiServer(fs FileService, nodeId int) *apiServer {
@@ -33,6 +34,9 @@ func NewApiServer(fs FileService, nodeId int) *apiServer {
 	log.Println("NodeID: ", nodeId)
 	s.fl = flother.NewFlother(time.Time{}, uint64(nodeId))
 	s.blocksize = int64(1024 * 64) // Default Block Size (64K)
+	s.updateChan = make(chan *UpdateItem, 1000)
+	updates := newUpdatinator(s.updateChan, fs)
+	go updates.run()
 	return s
 }
 
@@ -100,6 +104,15 @@ func (s *apiServer) Create(ctx context.Context, r *pb.CreateRequest) (*pb.Create
 		Gid:    r.Attr.Gid,
 	}
 	rname, rattr, err := s.fs.Create(ctx, formic.GetID(fsid.Bytes(), r.Parent, 0), formic.GetID(fsid.Bytes(), inode, 0), inode, r.Name, attr, false)
+	if err != nil {
+		return nil, err
+	}
+	// Write the first block
+	// TODO: Need to handle failure here better
+	err = s.fs.WriteChunk(ctx, formic.GetID(fsid.Bytes(), inode, 1), nil)
+	if err != nil {
+		return nil, err
+	}
 	return &pb.CreateResponse{Name: rname, Attr: rattr}, err
 }
 
@@ -148,13 +161,12 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 			return &pb.ReadResponse{}, err
 		}
 		if len(chunk) == 0 {
-			log.Printf("Err: Read 0 Bytes")
 			break
 		}
 		count := copy(data[cur:], chunk[firstOffset:])
 		firstOffset = 0
 		block += 1
-		cur += int64(len(chunk))
+		cur += int64(count)
 		log.Printf("Read %d bytes", count)
 		if int64(len(chunk)) < s.blocksize {
 			break
@@ -218,7 +230,14 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 		if err != nil {
 			return &pb.WriteResponse{Status: 1}, err
 		}
-		err = s.fs.Update(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
+		s.updateChan <- &UpdateItem{
+			id:        formic.GetID(fsid.Bytes(), r.Inode, 0),
+			block:     block,
+			blocksize: uint64(s.blocksize),
+			size:      uint64(len(payload)),
+			mtime:     time.Now().Unix(),
+		}
+		//err = s.fs.Update(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
 		if err != nil {
 			return &pb.WriteResponse{Status: 1}, err
 		}
