@@ -562,13 +562,6 @@ func (o *OortFS) Remove(ctx context.Context, parent []byte, name string) (int32,
 }
 
 func (o *OortFS) Update(ctx context.Context, id []byte, block, blocksize, size uint64, mtime int64) error {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return err
-	}
-	if !v {
-		return errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
 		return err
@@ -588,8 +581,9 @@ func (o *OortFS) Update(ctx context.Context, id []byte, block, blocksize, size u
 		n.LastBlock = size
 		n.Attr.Size = blocksize*block + size
 	}
-
-	n.Attr.Mtime = mtime
+	if mtime > n.Attr.Mtime {
+		n.Attr.Mtime = mtime
+	}
 	b, err = proto.Marshal(n)
 	if err != nil {
 		return err

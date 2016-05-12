@@ -109,7 +109,7 @@ func main() {
 			Name:      "show",
 			Usage:     "Show a File Systems",
 			ArgsUsage: "<region>://<account uuid>/<file system uuid>",
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for show.")
 					os.Exit(1)
@@ -134,6 +134,7 @@ func main() {
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
 				log.Printf("SHOW Results: %s", result.Payload)
+				return nil
 			},
 		},
 		{
@@ -147,7 +148,7 @@ func main() {
 					Usage: "Name of the file system",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for show.")
 					os.Exit(1)
@@ -172,13 +173,14 @@ func main() {
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
 				log.Printf("Create Results: %s", result.Payload)
+				return nil
 			},
 		},
 		{
 			Name:      "list",
 			Usage:     "List File Systems for an account",
 			ArgsUsage: "<region>://<account uuid>",
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for list.")
 					os.Exit(1)
@@ -199,13 +201,14 @@ func main() {
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
 				log.Printf("LIST Results: %s", result.Payload)
+				return nil
 			},
 		},
 		{
 			Name:      "delete",
 			Usage:     "Delete a File Systems",
 			ArgsUsage: "<region>://<account uuid>/<file system uuid>",
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for delete.")
 					os.Exit(1)
@@ -229,6 +232,7 @@ func main() {
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
 				log.Printf("Delete Results: %s", result.Payload)
+				return nil
 			},
 		},
 		{
@@ -247,7 +251,7 @@ func main() {
 					Usage: "Status of the file system",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for update.")
 					os.Exit(1)
@@ -280,6 +284,7 @@ func main() {
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
 				log.Printf("Update Results: %s", result.Payload)
+				return nil
 			},
 		},
 		{
@@ -293,7 +298,7 @@ func main() {
 					Usage: "Address to Grant",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for delete.")
 					os.Exit(1)
@@ -321,6 +326,7 @@ func main() {
 				}
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
+				return nil
 			},
 		},
 		{
@@ -334,7 +340,7 @@ func main() {
 					Usage: "Address to Revoke",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for revoke.")
 					os.Exit(1)
@@ -362,6 +368,7 @@ func main() {
 				}
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
+				return nil
 			},
 		},
 		{
@@ -375,7 +382,7 @@ func main() {
 					Usage: "Address to check",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for revoke.")
 					os.Exit(1)
@@ -395,6 +402,7 @@ func main() {
 				}
 				conn.Close()
 				log.Printf("Result: %s\n", result.Status)
+				return nil
 			},
 		},
 		{
@@ -408,7 +416,7 @@ func main() {
 					Usage: "mount options",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
 					fmt.Println("Invalid syntax for revoke.")
 					os.Exit(1)
@@ -464,7 +472,7 @@ func main() {
 						fuse.VolumeName("CFS"),
 						fuse.AllowOther(),
 						fuse.DefaultPermissions(),
-						//fuse.MaxReadahead(64*1024),
+						fuse.MaxReadahead(128*1024),
 					)
 				} else {
 					cfs, err = fuse.Mount(
@@ -474,7 +482,10 @@ func main() {
 						fuse.LocalVolume(),
 						fuse.VolumeName("CFS"),
 						fuse.DefaultPermissions(),
-						//fuse.MaxReadahead(64*1024),
+						fuse.MaxReadahead(128*1024),
+						//fuse.AsyncRead(), // probably safe but needs a valid test
+						//fuse.WritebackCache(), // Waiting on concurrent chunk update fix
+						//fuse.AutoInvalData(), // requires https://github.com/bazil/fuse/pull/137
 					)
 				}
 				if err != nil {
@@ -498,6 +509,7 @@ func main() {
 				if err := cfs.MountError; err != nil {
 					log.Fatal(err)
 				}
+				return nil
 			},
 		},
 	}

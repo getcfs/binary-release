@@ -11,6 +11,53 @@ import (
 	"golang.org/x/net/context"
 )
 
+type localAddr struct{}
+
+func (l localAddr) String() string {
+	return "internal"
+}
+func (l localAddr) Network() string {
+	return "internal"
+}
+
+type UpdateItem struct {
+	id        []byte
+	block     uint64
+	blocksize uint64
+	size      uint64
+	mtime     int64
+}
+
+type Updatinator struct {
+	in chan *UpdateItem
+	fs FileService
+}
+
+func newUpdatinator(in chan *UpdateItem, fs FileService) *Updatinator {
+	return &Updatinator{
+		in: in,
+		fs: fs,
+	}
+}
+
+func (u *Updatinator) run() {
+	// TODO: Add fan-out based on the id of the update
+	for {
+		toupdate := <-u.in
+		log.Println("Updating: ", toupdate)
+		// TODO: Need better context
+		p := &peer.Peer{
+			Addr: localAddr{},
+		}
+		ctx := peer.NewContext(context.Background(), p)
+		err := u.fs.Update(ctx, toupdate.id, toupdate.block, toupdate.blocksize, toupdate.size, toupdate.mtime)
+		if err != nil {
+			log.Println("Delete failed, requeing: ", err)
+			u.in <- toupdate
+		}
+	}
+}
+
 type DeleteItem struct {
 	parent []byte
 	name   string
@@ -26,15 +73,6 @@ func newDeletinator(in chan *DeleteItem, fs FileService) *Deletinator {
 		in: in,
 		fs: fs,
 	}
-}
-
-type localAddr struct{}
-
-func (l localAddr) String() string {
-	return "internal"
-}
-func (l localAddr) Network() string {
-	return "internal"
 }
 
 func (d *Deletinator) run() {

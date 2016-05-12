@@ -16,6 +16,11 @@ import (
 	"bazil.org/fuse/fuseutil"
 )
 
+const (
+	attrValidTime  = 5 * time.Second
+	entryValidTime = 5 * time.Second
+)
+
 type fs struct {
 	conn    *fuse.Conn
 	rpc     *rpc
@@ -216,7 +221,7 @@ func (f *fs) handleGetattr(r *fuse.GetattrRequest) {
 	}
 	copyAttr(&resp.Attr, a.Attr)
 	// TODO: should we make these configurable?
-	resp.Attr.Valid = 5 * time.Second
+	resp.Attr.Valid = attrValidTime
 
 	log.Println(resp)
 	r.Respond(resp)
@@ -244,8 +249,8 @@ func (f *fs) handleLookup(r *fuse.LookupRequest) {
 	resp.Node = fuse.NodeID(l.Attr.Inode)
 	copyAttr(&resp.Attr, l.Attr)
 	// TODO: should we make these configureable?
-	resp.Attr.Valid = 5 * time.Second
-	resp.EntryValid = 5 * time.Second
+	resp.Attr.Valid = attrValidTime
+	resp.EntryValid = entryValidTime
 
 	log.Println(resp)
 	r.Respond(resp)
@@ -270,8 +275,8 @@ func (f *fs) handleMkdir(r *fuse.MkdirRequest) {
 	}
 	resp.Node = fuse.NodeID(m.Attr.Inode)
 	copyAttr(&resp.Attr, m.Attr)
-	resp.Attr.Valid = 5 * time.Second
-	resp.EntryValid = 5 * time.Second
+	resp.Attr.Valid = attrValidTime
+	resp.EntryValid = entryValidTime
 
 	log.Println(resp)
 	r.Respond(resp)
@@ -283,6 +288,7 @@ func (f *fs) handleOpen(r *fuse.OpenRequest) {
 	resp := &fuse.OpenResponse{}
 	// For now use the inode as the file handle
 	resp.Handle = f.handles.newFileHandle(r.Node)
+	resp.Flags |= fuse.OpenKeepCache
 	log.Println(resp)
 	r.Respond(resp)
 }
@@ -381,11 +387,11 @@ func (f *fs) handleCreate(r *fuse.CreateRequest) {
 	}
 	resp.Node = fuse.NodeID(c.Attr.Inode)
 	copyAttr(&resp.Attr, c.Attr)
-	resp.EntryValid = 5 * time.Second
-	resp.Attr.Valid = 5 * time.Second
+	resp.EntryValid = entryValidTime
+	resp.Attr.Valid = attrValidTime
 	copyAttr(&resp.LookupResponse.Attr, c.Attr)
-	resp.LookupResponse.EntryValid = 5 * time.Second
-	resp.LookupResponse.Attr.Valid = 5 * time.Second
+	resp.LookupResponse.EntryValid = entryValidTime
+	resp.LookupResponse.Attr.Valid = attrValidTime
 	r.Respond(resp)
 }
 
@@ -425,7 +431,7 @@ func (f *fs) handleSetattr(r *fuse.SetattrRequest) {
 		return
 	}
 	copyAttr(&resp.Attr, setAttrResp.Attr)
-	resp.Attr.Valid = 5 * time.Second
+	resp.Attr.Valid = attrValidTime
 	log.Println(resp)
 	r.Respond(resp)
 }
@@ -522,8 +528,8 @@ func (f *fs) handleSymlink(r *fuse.SymlinkRequest) {
 	}
 	resp.Node = fuse.NodeID(symlink.Attr.Inode)
 	copyAttr(&resp.Attr, symlink.Attr)
-	resp.Attr.Valid = 5 * time.Second
-	resp.EntryValid = 5 * time.Second
+	resp.Attr.Valid = attrValidTime
+	resp.EntryValid = entryValidTime
 	log.Println(resp)
 	r.Respond(resp)
 }
