@@ -278,3 +278,48 @@ func (s *SyndClient) WatchRing() error {
 	}
 	return nil
 }
+
+//GetSoftwareVersions asks synd to query each host for its running software version
+//TODO: These are brute force (we're just looping over each id and querying each seperately),
+//and synd's not locking for the entire "transaction". So versions could change before this
+//list is finished (or nodes be added or removed)!
+//Long term synd should have a "GetAllSoftwareVersions()" call.
+func (s *SyndClient) GetSoftwareVersions() error {
+	ctx := context.Background()
+	res, err := s.client.SearchNodes(ctx, &pb.Node{})
+	if err != nil {
+		return err
+	}
+	for _, node := range res.Nodes {
+		ver, err := s.client.GetNodeSoftwareVersion(ctx, node)
+		if err != nil {
+			fmt.Printf("%d Error getting software version for: %s\n", node.Id, err.Error())
+			continue
+		}
+		fmt.Printf("%d %s - %+v\n", node.Id, ver.Version, node.Addresses)
+	}
+	return nil
+}
+
+//UpgradeSoftwareVersions asks synd to query each host for its running software version
+//NOTE: Upgrades roll on to other nodes regardless of whether any individual nodes encounters an error!
+//TODO: These are brute force (we're just looping over each id and asking for upgrades of
+//each found node seperately), and synd's not locking for the entire "transaction".
+//So versions (or nodes added/removed) could change before this list & roll out is finished!
+//Long term synd should have a "UpgradeAllSoftwareVersions()" call.
+func (s *SyndClient) UpgradeSoftwareVersions(version string) error {
+	ctx := context.Background()
+	res, err := s.client.SearchNodes(ctx, &pb.Node{})
+	if err != nil {
+		return err
+	}
+	for _, node := range res.Nodes {
+		status, err := s.client.NodeUpgradeSoftwareVersion(ctx, &pb.NodeUpgrade{Id: node.Id, Version: version})
+		if err != nil {
+			fmt.Printf("%d Error upgrading software version for: %s\n", node.Id, err.Error())
+			continue
+		}
+		fmt.Printf("%d %t\n", node.Id, status.Status)
+	}
+	return nil
+}
