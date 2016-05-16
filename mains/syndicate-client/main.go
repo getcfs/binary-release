@@ -47,8 +47,8 @@ start <cmdctrladdress> #attempts to start the remote nodes backend
 stop <cmdctrladdress> #attempts to stop the remote nodes backend
 restart <cmdctrladdress> #attempts to restart the remote nodes backend
 exit <cmdctrladdress> #attempts to exit the remote node
-upgrade <cmdctrladdress> <github version string> #asks the node to upgrade itself
-softwareversion  <cmdctrladdress> #gets the currently running version from the node
+ccupgrade <cmdctrladdress> <github version string> #DEPRECATED asks the node to upgrade itself 
+ccsoftwareversion  <cmdctrladdress> #DEPRECATED gets the currently running version from the node
 version			#print version
 config          #print ring config
 config <nodeid> #uses uint64 id
@@ -65,6 +65,8 @@ capacity <nodeid> <uint32>
 addrs <nodeid> 1.1.1.1,2.2.2.2,...
 tiers <nodeid> SomeTier,SomeTier2,...
 set config=./path/to/config
+softwareversion #gets all currently running versions from nodes
+upgradesoftware <version-string> #asks all currently running nodes to upgrade too <version-string>
 `, u.Username)
 }
 
@@ -129,7 +131,7 @@ func (s *SyndClient) mainEntry(args []string) error {
 			return err
 		}
 		return c.exitNodeCmd()
-	case "upgrade":
+	case "ccupgrade":
 		if len(args) != 3 {
 			return helpCmd()
 		}
@@ -138,7 +140,7 @@ func (s *SyndClient) mainEntry(args []string) error {
 			return err
 		}
 		return c.upgradeNodeCmd(args[2])
-	case "softwareversion":
+	case "ccsoftwareversion":
 		if len(args) != 2 {
 			return helpCmd()
 		}
@@ -257,6 +259,16 @@ func (s *SyndClient) mainEntry(args []string) error {
 			}
 		}
 		return nil
+	case "upgradesoftware":
+		if len(args) != 2 {
+			return helpCmd()
+		}
+		return s.UpgradeSoftwareVersions(args[1])
+	case "softwareversion":
+		if len(args) != 1 {
+			return helpCmd()
+		}
+		return s.GetSoftwareVersions()
 	}
 	return helpCmd()
 }

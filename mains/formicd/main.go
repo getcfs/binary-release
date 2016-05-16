@@ -151,13 +151,14 @@ func main() {
 		grpclog.Fatalln("Cannot start valuestore connector:", gerr)
 	}
 
-	fs, err := NewOortFS(vstore, gstore)
+	comms, err := NewStoreComms(vstore, gstore)
 	if err != nil {
 		grpclog.Fatalln(err)
 	}
+	fs := NewOortFS(comms)
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.port))
 	FatalIf(err, "Failed to bind to port")
-	pb.RegisterApiServer(s, NewApiServer(fs, cfg.nodeId))
+	pb.RegisterApiServer(s, NewApiServer(fs, cfg.nodeId, comms))
 	grpclog.Printf("Starting up on %d...\n", cfg.port)
 	s.Serve(l)
 }

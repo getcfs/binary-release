@@ -76,6 +76,8 @@ type ManagedNode interface {
 	RLock()
 	RUnlock()
 	Address() string
+	GetSoftwareVersion() (string, error)
+	UpgradeSoftwareVersion(string) (bool, error)
 }
 
 type managedNode struct {
@@ -241,6 +243,24 @@ func (n *managedNode) RingUpdate(r *[]byte, version int64) (bool, error) {
 		return false, fmt.Errorf("Ring update failed. Expected: %d, but node reports: %d\n", ru.Version, status.Newversion)
 	}
 	return true, nil
+}
+
+// GetSoftwareVersion retrieves a managed nodes running version
+func (n *managedNode) GetSoftwareVersion() (string, error) {
+	n.RLock()
+	defer n.RUnlock()
+	ctx, _ := context.WithTimeout(context.Background(), DEFAULT_CTX_TIMEOUT)
+	version, err := n.client.SoftwareVersion(ctx, &cc.EmptyMsg{})
+	return version.Version, err
+}
+
+// UpgradeSoftwareVersion asks a managed node to download and replace the running software
+func (n *managedNode) UpgradeSoftwareVersion(version string) (bool, error) {
+	n.Lock()
+	defer n.Unlock()
+	ctx, _ := context.WithTimeout(context.Background(), DEFAULT_CTX_TIMEOUT)
+	status, err := n.client.SelfUpgrade(ctx, &cc.SelfUpgradeMsg{Version: version})
+	return status.Status, err
 }
 
 // TODO: if disconnect encounters an error we just log it and remove the node anyway

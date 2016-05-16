@@ -302,7 +302,6 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 		data := f.handles.getReadCache(r.Handle)
 		if data == nil {
 			d, err := f.rpc.api.ReadDirAll(f.getContext(), &pb.ReadDirAllRequest{Inode: uint64(r.Node)})
-			log.Println(d)
 			if err != nil {
 				log.Printf("Read on dir failed: %s", err)
 				r.RespondError(fuse.EIO)
@@ -318,7 +317,6 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 				Type: fuse.DT_Dir,
 			})
 			for _, de := range d.DirEntries {
-				log.Println(de)
 				data = fuse.AppendDirent(data, fuse.Dirent{
 					Name:  de.Name,
 					Inode: de.Attr.Inode,
@@ -326,7 +324,6 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 				})
 			}
 			for _, fe := range d.FileEntries {
-				log.Println(fe)
 				data = fuse.AppendDirent(data, fuse.Dirent{
 					Name:  fe.Name,
 					Inode: fe.Attr.Inode,
@@ -558,7 +555,7 @@ func (f *fs) handleGetxattr(r *fuse.GetxattrRequest) {
 	if r.Name == "security.capability" {
 		// Ignore this for now
 		// TODO: Figure out if we want to allow this or not
-		r.Respond(&fuse.GetxattrResponse{})
+		r.RespondError(fuse.ENOSYS)
 		return
 	}
 	req := &pb.GetxattrRequest{
