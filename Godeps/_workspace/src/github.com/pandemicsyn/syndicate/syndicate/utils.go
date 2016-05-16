@@ -81,7 +81,7 @@ func ExtractCapacity(path string, disks []*pb.Disk) uint32 {
 	for k := range disks {
 		if disks[k] != nil {
 			if disks[k].Path == path {
-				return uint32(disks[k].Size / 1024 / 1024 / 1024)
+				return uint32(disks[k].Size_ / 1024 / 1024 / 1024)
 			}
 		}
 	}

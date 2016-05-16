@@ -483,8 +483,8 @@ func main() {
 						fuse.VolumeName("CFS"),
 						fuse.DefaultPermissions(),
 						fuse.MaxReadahead(128*1024),
-						//fuse.AsyncRead(), // probably safe but needs a valid test
 						//fuse.WritebackCache(), // Waiting on concurrent chunk update fix
+						//fuse.AsyncRead(), // probably safe but needs a valid test
 						//fuse.AutoInvalData(), // requires https://github.com/bazil/fuse/pull/137
 					)
 				}

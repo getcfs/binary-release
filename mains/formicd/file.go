@@ -2,16 +2,12 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"hash"
 	"hash/crc32"
 	"log"
-	"net"
 	"os"
 	"sort"
 	"time"
-
-	"google.golang.org/grpc/peer"
 
 	"bazil.org/fuse"
 
@@ -174,76 +170,23 @@ type OortFS struct {
 	hasher     func() hash.Hash32
 	comms      *StoreComms
 	deleteChan chan *DeleteItem
-	validIps   map[string]bool
 }
 
-func NewOortFS(vstore store.ValueStore, gstore store.GroupStore) (*OortFS, error) {
-	// TODO: This all eventually needs to replaced with value and group rings
-	comms, err := NewStoreComms(vstore, gstore)
-	if err != nil {
-		return &OortFS{}, err
-	}
+func NewOortFS(comms *StoreComms) *OortFS {
 	o := &OortFS{
-		hasher:   crc32.NewIEEE,
-		comms:    comms,
-		validIps: make(map[string]bool),
+		hasher: crc32.NewIEEE,
+		comms:  comms,
 	}
 	// TODO: How big should the chan be, or should we have another in memory queue that feeds the chan?
 	o.deleteChan = make(chan *DeleteItem, 1000)
 	deletes := newDeletinator(o.deleteChan, o)
 	go deletes.run()
-	return o, nil
-}
-
-func (o *OortFS) validateIP(ctx context.Context) (bool, error) {
-	// TODO: Add caching of validation
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return false, errors.New("Couldn't get client IP")
-	}
-	if p.Addr.String() == "internal" {
-		// This is an internal call, so we can skip
-		return true, nil
-	}
-	ip, _, err := net.SplitHostPort(p.Addr.String())
-	if err != nil {
-		return false, err
-	}
-	// First check the cache
-	valid, ok := o.validIps[ip]
-	if ok && valid {
-		return true, nil
-	}
-	fsid, err := GetFsId(ctx)
-	if err != nil {
-		return false, err
-	}
-	_, err = o.comms.ReadGroupItem(ctx, []byte(fmt.Sprintf("/fs/%s/addr", fsid.String())), []byte(ip))
-	if store.IsNotFound(err) {
-		log.Println("Invalid IP: ", ip)
-		// No access
-		return false, nil
-	}
-
-	if err != nil {
-		return false, err
-	}
-
-	// Cache the valid ip
-	o.validIps[ip] = true
-	return true, nil
+	return o
 }
 
 func (o *OortFS) InitFs(ctx context.Context, fsid []byte) error {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return err
-	}
-	if !v {
-		return errors.New("Unknown or unauthorized FS use")
-	}
 	id := formic.GetID(fsid, 1, 0)
-	n, err := o.GetChunk(ctx, id)
+	n, _ := o.GetChunk(ctx, id)
 	if len(n) == 0 {
 		log.Println("Creating new root at ", id)
 		// Need to create the root node
@@ -277,13 +220,6 @@ func (o *OortFS) InitFs(ctx context.Context, fsid []byte) error {
 }
 
 func (o *OortFS) GetAttr(ctx context.Context, id []byte) (*pb.Attr, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
 		return &pb.Attr{}, err
@@ -297,13 +233,6 @@ func (o *OortFS) GetAttr(ctx context.Context, id []byte) (*pb.Attr, error) {
 }
 
 func (o *OortFS) SetAttr(ctx context.Context, id []byte, attr *pb.Attr, v uint32) (*pb.Attr, error) {
-	vip, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !vip {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	valid := fuse.SetattrValid(v)
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
@@ -349,13 +278,6 @@ func (o *OortFS) SetAttr(ctx context.Context, id []byte, attr *pb.Attr, v uint32
 }
 
 func (o *OortFS) Create(ctx context.Context, parent, id []byte, inode uint64, name string, attr *pb.Attr, isdir bool) (string, *pb.Attr, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	if !v {
-		return "", nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Check to see if the name already exists
 	b, err := o.comms.ReadGroupItem(ctx, parent, []byte(name))
 	if err != nil && !store.IsNotFound(err) {
@@ -404,13 +326,6 @@ func (o *OortFS) Create(ctx context.Context, parent, id []byte, inode uint64, na
 }
 
 func (o *OortFS) Lookup(ctx context.Context, parent []byte, name string) (string, *pb.Attr, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	if !v {
-		return "", nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Get the id
 	b, err := o.comms.ReadGroupItem(ctx, parent, []byte(name))
 	if store.IsNotFound(err) {
@@ -455,16 +370,8 @@ func (d ByDirent) Less(i, j int) bool {
 }
 
 func (o *OortFS) ReadDirAll(ctx context.Context, id []byte) (*pb.ReadDirAllResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Get the keys from the group
 	items, err := o.comms.ReadGroup(ctx, id)
-	log.Println("ITEMS: ", items)
 	if err != nil {
 		// TODO: Needs beter error handling
 		log.Println("Error looking up group: ", err)
@@ -495,7 +402,6 @@ func (o *OortFS) ReadDirAll(ctx context.Context, id []byte) (*pb.ReadDirAllRespo
 		}
 		n := &pb.InodeEntry{}
 		err = proto.Unmarshal(b, n)
-		log.Printf("Unmarshaled Inode(%d): %v", dirent.Id, n)
 		if err != nil {
 			continue
 		}
@@ -511,13 +417,6 @@ func (o *OortFS) ReadDirAll(ctx context.Context, id []byte) (*pb.ReadDirAllRespo
 }
 
 func (o *OortFS) Remove(ctx context.Context, parent []byte, name string) (int32, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return 1, err
-	}
-	if !v {
-		return 1, errors.New("Unknown or unauthorized FS use")
-	}
 	// Get the ID from the group list
 	b, err := o.comms.ReadGroupItem(ctx, parent, []byte(name))
 	if store.IsNotFound(err) {
@@ -596,13 +495,6 @@ func (o *OortFS) Update(ctx context.Context, id []byte, block, blocksize, size u
 }
 
 func (o *OortFS) Symlink(ctx context.Context, parent, id []byte, name string, target string, attr *pb.Attr, inode uint64) (*pb.SymlinkResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Check to see if the name exists
 	val, err := o.comms.ReadGroupItem(ctx, parent, []byte(name))
 	if err != nil && !store.IsNotFound(err) {
@@ -646,13 +538,6 @@ func (o *OortFS) Symlink(ctx context.Context, parent, id []byte, name string, ta
 }
 
 func (o *OortFS) Readlink(ctx context.Context, id []byte) (*pb.ReadlinkResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
 		return &pb.ReadlinkResponse{}, err
@@ -666,13 +551,6 @@ func (o *OortFS) Readlink(ctx context.Context, id []byte) (*pb.ReadlinkResponse,
 }
 
 func (o *OortFS) Getxattr(ctx context.Context, id []byte, name string) (*pb.GetxattrResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
 		return &pb.GetxattrResponse{}, err
@@ -689,13 +567,6 @@ func (o *OortFS) Getxattr(ctx context.Context, id []byte, name string) (*pb.Getx
 }
 
 func (o *OortFS) Setxattr(ctx context.Context, id []byte, name string, value []byte) (*pb.SetxattrResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
 		return &pb.SetxattrResponse{}, err
@@ -721,13 +592,6 @@ func (o *OortFS) Setxattr(ctx context.Context, id []byte, name string, value []b
 }
 
 func (o *OortFS) Listxattr(ctx context.Context, id []byte) (*pb.ListxattrResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	resp := &pb.ListxattrResponse{}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
@@ -748,13 +612,6 @@ func (o *OortFS) Listxattr(ctx context.Context, id []byte) (*pb.ListxattrRespons
 }
 
 func (o *OortFS) Removexattr(ctx context.Context, id []byte, name string) (*pb.RemovexattrResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
 		return &pb.RemovexattrResponse{}, err
@@ -777,13 +634,6 @@ func (o *OortFS) Removexattr(ctx context.Context, id []byte, name string) (*pb.R
 }
 
 func (o *OortFS) Rename(ctx context.Context, oldParent, newParent []byte, oldName, newName string) (*pb.RenameResponse, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Get the ID from the group list
 	b, err := o.comms.ReadGroupItem(ctx, oldParent, []byte(oldName))
 	if store.IsNotFound(err) {
@@ -816,13 +666,6 @@ func (o *OortFS) Rename(ctx context.Context, oldParent, newParent []byte, oldNam
 }
 
 func (o *OortFS) GetChunk(ctx context.Context, id []byte) ([]byte, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	b, err := o.comms.ReadValue(ctx, id)
 	if store.IsNotFound(err) {
 		return nil, ErrNotFound
@@ -840,13 +683,6 @@ func (o *OortFS) GetChunk(ctx context.Context, id []byte) ([]byte, error) {
 }
 
 func (o *OortFS) WriteChunk(ctx context.Context, id, data []byte) error {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return err
-	}
-	if !v {
-		return errors.New("Unknown or unauthorized FS use")
-	}
 	crc := o.hasher()
 	crc.Write(data)
 	fb := &pb.FileBlock{
@@ -862,35 +698,14 @@ func (o *OortFS) WriteChunk(ctx context.Context, id, data []byte) error {
 }
 
 func (o *OortFS) DeleteChunk(ctx context.Context, id []byte, tsm int64) error {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return err
-	}
-	if !v {
-		return errors.New("Unknown or unauthorized FS use")
-	}
 	return o.comms.DeleteValueTS(ctx, id, tsm)
 }
 
 func (o *OortFS) DeleteListing(ctx context.Context, parent []byte, name string, tsm int64) error {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return err
-	}
-	if !v {
-		return errors.New("Unknown or unauthorized FS use")
-	}
 	return o.comms.DeleteGroupItemTS(ctx, parent, []byte(name), tsm)
 }
 
 func (o *OortFS) GetInode(ctx context.Context, id []byte) (*pb.InodeEntry, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Get the Inode entry
 	b, err := o.GetChunk(ctx, id)
 	if err != nil {
@@ -905,13 +720,6 @@ func (o *OortFS) GetInode(ctx context.Context, id []byte) (*pb.InodeEntry, error
 }
 
 func (o *OortFS) GetDirent(ctx context.Context, parent []byte, name string) (*pb.DirEntry, error) {
-	v, err := o.validateIP(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !v {
-		return nil, errors.New("Unknown or unauthorized FS use")
-	}
 	// Get the Dir Entry
 	b, err := o.comms.ReadGroupItem(ctx, parent, []byte(name))
 	if store.IsNotFound(err) {

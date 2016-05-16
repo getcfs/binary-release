@@ -15,6 +15,8 @@ service Syndicate {
     rpc GetVersion(EmptyMsg) returns (RingStatus) {}
     rpc GetGlobalConfig(EmptyMsg) returns (RingConf) {}
     rpc GetNodeConfig(Node) returns (RingConf) {}
+    rpc GetNodeSoftwareVersion(Node) returns (NodeSoftwareVersion) {}
+    rpc NodeUpgradeSoftwareVersion(NodeUpgrade) returns (NodeUpgradeStatus) {}
     rpc SearchNodes(Node) returns (SearchResult) {}
     rpc GetRing(EmptyMsg) returns (Ring) {}
     rpc GetRingStream(SubscriberID) returns (stream Ring) {}
@@ -93,8 +95,21 @@ message SearchResult {
     repeated Node nodes = 1;
 }
 
+message NodeSoftwareVersion {
+    string version = 1;
+}
 
+message NodeUpgrade {
+    uint64 id = 1;
+    string version = 2;
+}
 
+message NodeUpgradeStatus {
+    bool status = 1;
+    string msg = 2;
+}
+
+//TODO: get clustered syndicate working again
 service RingDist {
     rpc Store(RingMsg) returns (StoreResult) {}
     rpc Revert(RingMsg) returns (StoreResult) {}

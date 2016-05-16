@@ -4,20 +4,26 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
+	"net"
 	"os"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 
 	"github.com/creiht/formic"
 	"github.com/creiht/formic/flother"
 	pb "github.com/creiht/formic/proto"
+	"github.com/gholt/store"
 	"github.com/satori/go.uuid"
 	"github.com/spaolacci/murmur3"
 	"golang.org/x/net/context"
 )
+
+var ErrUnauthorized = errors.New("Unknown or unauthorized filesystem")
 
 type apiServer struct {
 	sync.RWMutex
@@ -25,12 +31,15 @@ type apiServer struct {
 	fl         *flother.Flother
 	blocksize  int64
 	updateChan chan *UpdateItem
+	comms      *StoreComms
+	validIPs   map[string]map[string]bool
 }
 
-func NewApiServer(fs FileService, nodeId int) *apiServer {
+func NewApiServer(fs FileService, nodeId int, comms *StoreComms) *apiServer {
 	s := new(apiServer)
 	s.fs = fs
-	// TODO: Get epoch and node id from some config
+	s.comms = comms
+	s.validIPs = make(map[string]map[string]bool)
 	log.Println("NodeID: ", nodeId)
 	s.fl = flother.NewFlother(time.Time{}, uint64(nodeId))
 	s.blocksize = int64(1024 * 64) // Default Block Size (64K)
@@ -68,7 +77,50 @@ func GetFsId(ctx context.Context) (uuid.UUID, error) {
 	return u, nil
 }
 
+func (s *apiServer) validateIP(ctx context.Context) error {
+	// TODO: Add caching of validation
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return errors.New("Couldn't get client IP")
+	}
+	ip, _, err := net.SplitHostPort(p.Addr.String())
+	if err != nil {
+		return err
+	}
+	fsidUUID, err := GetFsId(ctx)
+	fsid := fsidUUID.String()
+	if err != nil {
+		return err
+	}
+	// First check the cache
+	ips, ok := s.validIPs[fsid]
+	if !ok {
+		ips = make(map[string]bool)
+		s.validIPs[fsid] = ips
+	}
+	valid, ok := ips[ip]
+	if ok && valid {
+		return nil
+	}
+	_, err = s.comms.ReadGroupItem(ctx, []byte(fmt.Sprintf("/fs/%s/addr", fsid)), []byte(ip))
+	if store.IsNotFound(err) {
+		log.Println("Invalid IP: ", ip)
+		// No access
+		return ErrUnauthorized
+	}
+	if err != nil {
+		return err
+	}
+	// Cache the valid ip
+	s.validIPs[fsid][ip] = true
+	return nil
+}
+
 func (s *apiServer) GetAttr(ctx context.Context, r *pb.GetAttrRequest) (*pb.GetAttrResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -78,6 +130,10 @@ func (s *apiServer) GetAttr(ctx context.Context, r *pb.GetAttrRequest) (*pb.GetA
 }
 
 func (s *apiServer) SetAttr(ctx context.Context, r *pb.SetAttrRequest) (*pb.SetAttrResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -87,6 +143,10 @@ func (s *apiServer) SetAttr(ctx context.Context, r *pb.SetAttrRequest) (*pb.SetA
 }
 
 func (s *apiServer) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -117,6 +177,10 @@ func (s *apiServer) Create(ctx context.Context, r *pb.CreateRequest) (*pb.Create
 }
 
 func (s *apiServer) MkDir(ctx context.Context, r *pb.MkDirRequest) (*pb.MkDirResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -138,6 +202,10 @@ func (s *apiServer) MkDir(ctx context.Context, r *pb.MkDirRequest) (*pb.MkDirRes
 }
 
 func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -149,12 +217,10 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 	if r.Offset%s.blocksize != 0 {
 		// Handle non-aligned offset
 		firstOffset = r.Offset - int64(block)*s.blocksize
-		log.Printf("Offset: %d, firstOffset: %d", r.Offset, firstOffset)
 	}
 	cur := int64(0)
 	for cur < r.Size {
 		id := formic.GetID(fsid.Bytes(), r.Inode, block+1) // block 0 is for inode data
-		log.Printf("Reading Inode: %d, Block: %d ID: %d", r.Inode, block, id)
 		chunk, err := s.fs.GetChunk(ctx, id)
 		if err != nil {
 			log.Print("Err: Failed to read block: ", err)
@@ -167,7 +233,6 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 		firstOffset = 0
 		block += 1
 		cur += int64(count)
-		log.Printf("Read %d bytes", count)
 		if int64(len(chunk)) < s.blocksize {
 			break
 		}
@@ -185,17 +250,20 @@ func min(a, b int64) int64 {
 }
 
 func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("WRITE: Inode %d Offset: %d Size: %d", r.Inode, r.Offset, len(r.Payload))
 	block := uint64(r.Offset / s.blocksize)
-	// TODO: Handle unaligned offsets
 	firstOffset := int64(0)
 	if r.Offset%s.blocksize != 0 {
 		// Handle non-aligned offset
 		firstOffset = r.Offset - int64(block)*s.blocksize
-		log.Printf("Offset: %d, firstOffset: %d", r.Offset, firstOffset)
 	}
 	cur := int64(0)
 	for cur < int64(len(r.Payload)) {
@@ -209,9 +277,9 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 			// need to get the block and update
 			chunk := make([]byte, firstOffset+int64(len(payload)))
 			data, err := s.fs.GetChunk(ctx, id)
-			if firstOffset > 0 && (err != nil || len(data) == 0) {
-				// TODO: Need better error handling for when there is a block but it can't retreive it
-				log.Printf("ERR: couldn't get block id %d", id)
+			if firstOffset > 0 && err != nil {
+				// TODO: How do we differentiate a block that hasn't been created yet, and a block that is truely missing?
+				log.Printf("WARN: couldn't get block id %d", id)
 			} else {
 				if len(data) > len(chunk) {
 					chunk = data
@@ -219,12 +287,10 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 					copy(chunk, data)
 				}
 			}
-			log.Printf("DATA LEN: %d CHUNK LEN: %d", len(data), len(chunk))
 			copy(chunk[firstOffset:], payload)
 			payload = chunk
 			firstOffset = 0
 		}
-		log.Printf("Writing Inode: %d Block: %d ID: %d Len: %d", r.Inode, block, id, sendSize)
 		err := s.fs.WriteChunk(ctx, id, payload)
 		// TODO: Need better error handling for failing with multiple chunks
 		if err != nil {
@@ -237,10 +303,6 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 			size:      uint64(len(payload)),
 			mtime:     time.Now().Unix(),
 		}
-		//err = s.fs.Update(ctx, formic.GetID(fsid.Bytes(), r.Inode, 0), block, uint64(s.blocksize), uint64(len(payload)), time.Now().Unix())
-		if err != nil {
-			return &pb.WriteResponse{Status: 1}, err
-		}
 		cur += sendSize
 		block += 1
 	}
@@ -248,6 +310,10 @@ func (s *apiServer) Write(ctx context.Context, r *pb.WriteRequest) (*pb.WriteRes
 }
 
 func (s *apiServer) Lookup(ctx context.Context, r *pb.LookupRequest) (*pb.LookupResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -257,6 +323,10 @@ func (s *apiServer) Lookup(ctx context.Context, r *pb.LookupRequest) (*pb.Lookup
 }
 
 func (s *apiServer) ReadDirAll(ctx context.Context, n *pb.ReadDirAllRequest) (*pb.ReadDirAllResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -265,6 +335,10 @@ func (s *apiServer) ReadDirAll(ctx context.Context, n *pb.ReadDirAllRequest) (*p
 }
 
 func (s *apiServer) Remove(ctx context.Context, r *pb.RemoveRequest) (*pb.RemoveResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -274,6 +348,10 @@ func (s *apiServer) Remove(ctx context.Context, r *pb.RemoveRequest) (*pb.Remove
 }
 
 func (s *apiServer) Symlink(ctx context.Context, r *pb.SymlinkRequest) (*pb.SymlinkResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -295,6 +373,10 @@ func (s *apiServer) Symlink(ctx context.Context, r *pb.SymlinkRequest) (*pb.Syml
 }
 
 func (s *apiServer) Readlink(ctx context.Context, r *pb.ReadlinkRequest) (*pb.ReadlinkResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -303,6 +385,10 @@ func (s *apiServer) Readlink(ctx context.Context, r *pb.ReadlinkRequest) (*pb.Re
 }
 
 func (s *apiServer) Getxattr(ctx context.Context, r *pb.GetxattrRequest) (*pb.GetxattrResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -311,6 +397,10 @@ func (s *apiServer) Getxattr(ctx context.Context, r *pb.GetxattrRequest) (*pb.Ge
 }
 
 func (s *apiServer) Setxattr(ctx context.Context, r *pb.SetxattrRequest) (*pb.SetxattrResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -319,6 +409,10 @@ func (s *apiServer) Setxattr(ctx context.Context, r *pb.SetxattrRequest) (*pb.Se
 }
 
 func (s *apiServer) Listxattr(ctx context.Context, r *pb.ListxattrRequest) (*pb.ListxattrResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -327,6 +421,10 @@ func (s *apiServer) Listxattr(ctx context.Context, r *pb.ListxattrRequest) (*pb.
 }
 
 func (s *apiServer) Removexattr(ctx context.Context, r *pb.RemovexattrRequest) (*pb.RemovexattrResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -335,6 +433,10 @@ func (s *apiServer) Removexattr(ctx context.Context, r *pb.RemovexattrRequest) (
 }
 
 func (s *apiServer) Rename(ctx context.Context, r *pb.RenameRequest) (*pb.RenameResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
@@ -343,6 +445,10 @@ func (s *apiServer) Rename(ctx context.Context, r *pb.RenameRequest) (*pb.Rename
 }
 
 func (s *apiServer) Statfs(ctx context.Context, r *pb.StatfsRequest) (*pb.StatfsResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp := &pb.StatfsResponse{
 		Blocks:  281474976710656, // 1 exabyte (asuming 4K block size)
 		Bfree:   281474976710656,
@@ -357,6 +463,10 @@ func (s *apiServer) Statfs(ctx context.Context, r *pb.StatfsRequest) (*pb.Statfs
 }
 
 func (s *apiServer) InitFs(ctx context.Context, r *pb.InitFsRequest) (*pb.InitFsResponse, error) {
+	err := s.validateIP(ctx)
+	if err != nil {
+		return nil, err
+	}
 	fsid, err := GetFsId(ctx)
 	if err != nil {
 		return nil, err
