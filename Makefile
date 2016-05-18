@@ -13,7 +13,7 @@ GOVERSION := $(shell go version | sed -e 's/ /-/g')
 
 world: sync-all save update
 
-sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs formic oohhc-filesysd
+sync-all: oort-cli oort-value oort-group syndicate cfsdvp cfs formic
 
 save:
 	godep save -v ./...
@@ -58,7 +58,6 @@ build:
 			-X main.formicdVersion=$(VERSION) \
 			-X main.goVersion=$(shell go version | sed -e 's/ /-/g') \
 			-X main.buildDate=$(shell date -u +%Y-%m-%d.%H:%M:%S)" github.com/getcfs/cfs-binary-release/mains/formicd
-	godep go build -i -v --ldflags "$(LD_FLAGS)" -o build/oohhc-filesysd github.com/getcfs/cfs-binary-release/mains/oohhc-filesysd
 
 darwin: export GOOS=darwin
 darwin:
@@ -104,6 +103,3 @@ cfs:
 
 formic:
 	rsync -a --delete $(OGOPATH)/src/github.com/creiht/formic/formicd $(SRCPATH)
-
-oohhc-filesysd:
-	rsync --delete -av $(OGOPATH)/src/github.com/letterj/oohhc/oohhc-filesysd $(SRCPATH)

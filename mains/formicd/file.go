@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"bazil.org/fuse"
+	"github.com/getcfs/fuse"
 
 	"github.com/creiht/formic"
 	pb "github.com/creiht/formic/proto"
@@ -292,11 +292,18 @@ func (o *OortFS) Create(ctx context.Context, parent, id []byte, inode uint64, na
 	if err != nil {
 		return "", &pb.Attr{}, err
 	}
+	var direntType fuse.DirentType
+	if isdir {
+		direntType = fuse.DT_Dir
+	} else {
+		direntType = fuse.DT_File
+	}
 	// Add the name to the group
 	d := &pb.DirEntry{
 		Version: DirEntryVersion,
 		Name:    name,
 		Id:      id,
+		Type:    uint32(direntType),
 	}
 	b, err = proto.Marshal(d)
 	if err != nil {
@@ -389,30 +396,9 @@ func (o *OortFS) ReadDirAll(ctx context.Context, id []byte) (*pb.ReadDirAllRespo
 			// Skip deleted entries
 			continue
 		}
-		// get the inode entry
-		b, err := o.GetChunk(ctx, dirent.Id)
-		if err != nil {
-			continue
-		}
-		if len(b) == 0 {
-			// If we get an empty value, skip for now
-			// TODO: Figure out how we should handle this
-			log.Printf("ERR: Received an empty chunk for id %v", dirent.Id)
-			continue
-		}
-		n := &pb.InodeEntry{}
-		err = proto.Unmarshal(b, n)
-		if err != nil {
-			continue
-		}
-		if n.IsDir {
-			e.DirEntries = append(e.DirEntries, &pb.DirEnt{Name: dirent.Name, Attr: n.Attr})
-		} else {
-			e.FileEntries = append(e.FileEntries, &pb.DirEnt{Name: dirent.Name, Attr: n.Attr})
-		}
+		e.DirEntries = append(e.DirEntries, &pb.DirEnt{Name: dirent.Name, Type: dirent.Type})
 	}
 	sort.Sort(ByDirent(e.DirEntries))
-	sort.Sort(ByDirent(e.FileEntries))
 	return e, nil
 }
 
@@ -525,6 +511,7 @@ func (o *OortFS) Symlink(ctx context.Context, parent, id []byte, name string, ta
 		Version: DirEntryVersion,
 		Name:    name,
 		Id:      id,
+		Type:    uint32(fuse.DT_File),
 	}
 	b, err = proto.Marshal(d)
 	if err != nil {

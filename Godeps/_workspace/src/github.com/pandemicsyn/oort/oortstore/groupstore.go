@@ -123,178 +123,347 @@ func (s *OortGroupStore) start() {
 		log.Println("TCPMsgRing Listen() returned, shutdown?")
 	}(s.msgRing)
 	go func(t *ring.TCPMsgRing) {
+		mRingChanges := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "RingChanges",
+			Help:      "Number of received ring changes.",
+		})
+		mRingChangeCloses := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "RingChangeCloses",
+			Help:      "Number of connections closed due to ring changes.",
+		})
+		mMsgToNodes := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToNodes",
+			Help:      "Number of times MsgToNode function has been called; single message to single node.",
+		})
+		mMsgToNodeNoRings := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToNodeNoRings",
+			Help:      "Number of times MsgToNode function has been called with no ring yet available.",
+		})
+		mMsgToNodeNoNodes := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToNodeNoNodes",
+			Help:      "Number of times MsgToNode function has been called with no matching node.",
+		})
+		mMsgToOtherReplicas := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToOtherReplicas",
+			Help:      "Number of times MsgToOtherReplicas function has been called; single message to all replicas, excluding the local replica if responsible.",
+		})
+		mMsgToOtherReplicasNoRings := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToOtherReplicasNoRings",
+			Help:      "Number of times MsgToOtherReplicas function has been called with no ring yet available.",
+		})
+		mListenErrors := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "ListenErrors",
+			Help:      "Number of errors trying to establish a TCP listener.",
+		})
+		mIncomingConnections := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "IncomingConnections",
+			Help:      "Number of incoming TCP connections made.",
+		})
+		mDials := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "Dials",
+			Help:      "Number of attempts to establish outgoing TCP connections.",
+		})
+		mDialErrors := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "DialErrors",
+			Help:      "Number of errors trying to establish outgoing TCP connections.",
+		})
+		mOutgoingConnections := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "OutgoingConnections",
+			Help:      "Number of outgoing TCP connections established.",
+		})
+		mMsgChanCreations := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgChanCreations",
+			Help:      "Number of internal message channels created.",
+		})
+		mMsgToAddrs := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToAddrs",
+			Help:      "Number times internal function msgToAddr has been called.",
+		})
+		mMsgToAddrQueues := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToAddrQueues",
+			Help:      "Number of messages msgToAddr successfully queued.",
+		})
+		mMsgToAddrTimeoutDrops := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToAddrTimeoutDrops",
+			Help:      "Number of messages msgToAddr dropped after timeout.",
+		})
+		mMsgToAddrShutdownDrops := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgToAddrShutdownDrops",
+			Help:      "Number of messages msgToAddr dropped due to a shutdown.",
+		})
+		mMsgReads := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgReads",
+			Help:      "Number of incoming messages read.",
+		})
+		mMsgReadErrors := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgReadErrors",
+			Help:      "Number of errors reading incoming messages.",
+		})
+		mMsgWrites := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgWrites",
+			Help:      "Number of outgoing messages written.",
+		})
+		mMsgWriteErrors := prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "TCPMsgRing",
+			Name:      "MsgWriteErrors",
+			Help:      "Number of errors writing outgoing messages.",
+		})
 		mValues := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "Values",
-			Help: "Current number of values stored.",
+			Namespace: "Store",
+			Name:      "Values",
+			Help:      "Current number of values stored.",
 		})
 		mValueBytes := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "ValueBytes",
-			Help: "Current number of bytes for the values stored.",
+			Namespace: "Store",
+			Name:      "ValueBytes",
+			Help:      "Current number of bytes for the values stored.",
 		})
 		mLookups := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "Lookups",
-			Help: "Count of lookup requests executed.",
+			Namespace: "Store",
+			Name:      "Lookups",
+			Help:      "Count of lookup requests executed.",
 		})
 		mLookupErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "LookupErrors",
-			Help: "Count of lookup requests executed resulting in errors.",
+			Namespace: "Store",
+			Name:      "LookupErrors",
+			Help:      "Count of lookup requests executed resulting in errors.",
 		})
 		mLookupGroups := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "LookupGroups",
-			Help: "Count of lookup-group requests executed.",
+			Namespace: "Store",
+			Name:      "LookupGroups",
+			Help:      "Count of lookup-group requests executed.",
 		})
 		mLookupGroupItems := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "LookupGroupItems",
-			Help: "Count of items lookup-group requests have returned.",
+			Namespace: "Store",
+			Name:      "LookupGroupItems",
+			Help:      "Count of items lookup-group requests have returned.",
 		})
 		mLookupGroupErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "LookupGroupErrors",
-			Help: "Count of errors lookup-group requests have returned.",
+			Namespace: "Store",
+			Name:      "LookupGroupErrors",
+			Help:      "Count of errors lookup-group requests have returned.",
 		})
 		mReads := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "Reads",
-			Help: "Count of read requests executed.",
+			Namespace: "Store",
+			Name:      "Reads",
+			Help:      "Count of read requests executed.",
 		})
 		mReadErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "ReadErrors",
-			Help: "Count of read requests executed resulting in errors.",
+			Namespace: "Store",
+			Name:      "ReadErrors",
+			Help:      "Count of read requests executed resulting in errors.",
 		})
 		mReadGroups := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "ReadGroups",
-			Help: "Count of read-group requests executed.",
+			Namespace: "Store",
+			Name:      "ReadGroups",
+			Help:      "Count of read-group requests executed.",
 		})
 		mReadGroupItems := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "ReadGroupItems",
-			Help: "Count of items read-group requests have returned.",
+			Namespace: "Store",
+			Name:      "ReadGroupItems",
+			Help:      "Count of items read-group requests have returned.",
 		})
 		mReadGroupErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "ReadGroupErrors",
-			Help: "Count of errors read-group requests have returned.",
+			Namespace: "Store",
+			Name:      "ReadGroupErrors",
+			Help:      "Count of errors read-group requests have returned.",
 		})
 		mWrites := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "Writes",
-			Help: "Count of write requests executed.",
+			Namespace: "Store",
+			Name:      "Writes",
+			Help:      "Count of write requests executed.",
 		})
 		mWriteErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "WriteErrors",
-			Help: "Count of write requests executed resulting in errors.",
+			Namespace: "Store",
+			Name:      "WriteErrors",
+			Help:      "Count of write requests executed resulting in errors.",
 		})
 		mWritesOverridden := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "WritesOverridden",
-			Help: "Count of write requests that were outdated or repeated.",
+			Namespace: "Store",
+			Name:      "WritesOverridden",
+			Help:      "Count of write requests that were outdated or repeated.",
 		})
 		mDeletes := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "Deletes",
-			Help: "Count of delete requests executed.",
+			Namespace: "Store",
+			Name:      "Deletes",
+			Help:      "Count of delete requests executed.",
 		})
 		mDeleteErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "DeleteErrors",
-			Help: "Count of delete requests executed resulting in errors.",
+			Namespace: "Store",
+			Name:      "DeleteErrors",
+			Help:      "Count of delete requests executed resulting in errors.",
 		})
 		mDeletesOverridden := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "DeletesOverridden",
-			Help: "Count of delete requests that were outdated or repeated.",
+			Namespace: "Store",
+			Name:      "DeletesOverridden",
+			Help:      "Count of delete requests that were outdated or repeated.",
 		})
 		mOutBulkSets := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "OutBulkSets",
-			Help: "Count of outgoing bulk-set messages in response to incoming pull replication messages.",
+			Namespace: "Store",
+			Name:      "OutBulkSets",
+			Help:      "Count of outgoing bulk-set messages in response to incoming pull replication messages.",
 		})
 		mOutBulkSetValues := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "OutBulkSetValues",
-			Help: "Count of values in outgoing bulk-set messages; these bulk-set messages are those in response to incoming pull-replication messages.",
+			Namespace: "Store",
+			Name:      "OutBulkSetValues",
+			Help:      "Count of values in outgoing bulk-set messages; these bulk-set messages are those in response to incoming pull-replication messages.",
 		})
 		mOutBulkSetPushes := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "OutBulkSetPushes",
-			Help: "Count of outgoing bulk-set messages due to push replication.",
+			Namespace: "Store",
+			Name:      "OutBulkSetPushes",
+			Help:      "Count of outgoing bulk-set messages due to push replication.",
 		})
 		mOutBulkSetPushValues := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "OutBulkSetPushValues",
-			Help: "Count of values in outgoing bulk-set messages; these bulk-set messages are those due to push replication.",
+			Namespace: "Store",
+			Name:      "OutBulkSetPushValues",
+			Help:      "Count of values in outgoing bulk-set messages; these bulk-set messages are those due to push replication.",
 		})
 		mInBulkSets := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSets",
-			Help: "Count of incoming bulk-set messages.",
+			Namespace: "Store",
+			Name:      "InBulkSets",
+			Help:      "Count of incoming bulk-set messages.",
 		})
 		mInBulkSetDrops := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetDrops",
-			Help: "Count of incoming bulk-set messages dropped due to the local system being overworked at the time.",
+			Namespace: "Store",
+			Name:      "InBulkSetDrops",
+			Help:      "Count of incoming bulk-set messages dropped due to the local system being overworked at the time.",
 		})
 		mInBulkSetInvalids := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetInvalids",
-			Help: "Count of incoming bulk-set messages that couldn't be parsed.",
+			Namespace: "Store",
+			Name:      "InBulkSetInvalids",
+			Help:      "Count of incoming bulk-set messages that couldn't be parsed.",
 		})
 		mInBulkSetWrites := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetWrites",
-			Help: "Count of writes due to incoming bulk-set messages.",
+			Namespace: "Store",
+			Name:      "InBulkSetWrites",
+			Help:      "Count of writes due to incoming bulk-set messages.",
 		})
 		mInBulkSetWriteErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetWriteErrors",
-			Help: "Count of errors returned from writes due to incoming bulk-set messages.",
+			Namespace: "Store",
+			Name:      "InBulkSetWriteErrors",
+			Help:      "Count of errors returned from writes due to incoming bulk-set messages.",
 		})
 		mInBulkSetWritesOverridden := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetWritesOverridden",
-			Help: "Count of writes from incoming bulk-set messages that result in no change.",
+			Namespace: "Store",
+			Name:      "InBulkSetWritesOverridden",
+			Help:      "Count of writes from incoming bulk-set messages that result in no change.",
 		})
 		mOutBulkSetAcks := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "OutBulkSetAcks",
-			Help: "Count of outgoing bulk-set-ack messages.",
+			Namespace: "Store",
+			Name:      "OutBulkSetAcks",
+			Help:      "Count of outgoing bulk-set-ack messages.",
 		})
 		mInBulkSetAcks := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetAcks",
-			Help: "Count of incoming bulk-set-ack messages.",
+			Namespace: "Store",
+			Name:      "InBulkSetAcks",
+			Help:      "Count of incoming bulk-set-ack messages.",
 		})
 		mInBulkSetAckDrops := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetAckDrops",
-			Help: "Count of incoming bulk-set-ack messages dropped due to the local system being overworked at the time.",
+			Namespace: "Store",
+			Name:      "InBulkSetAckDrops",
+			Help:      "Count of incoming bulk-set-ack messages dropped due to the local system being overworked at the time.",
 		})
 		mInBulkSetAckInvalids := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetAckInvalids",
-			Help: "Count of incoming bulk-set-ack messages that couldn't be parsed.",
+			Namespace: "Store",
+			Name:      "InBulkSetAckInvalids",
+			Help:      "Count of incoming bulk-set-ack messages that couldn't be parsed.",
 		})
 		mInBulkSetAckWrites := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetAckWrites",
-			Help: "Count of writes (for local removal) due to incoming bulk-set-ack messages.",
+			Namespace: "Store",
+			Name:      "InBulkSetAckWrites",
+			Help:      "Count of writes (for local removal) due to incoming bulk-set-ack messages.",
 		})
 		mInBulkSetAckWriteErrors := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetAckWriteErrors",
-			Help: "Count of errors returned from writes due to incoming bulk-set-ack messages.",
+			Namespace: "Store",
+			Name:      "InBulkSetAckWriteErrors",
+			Help:      "Count of errors returned from writes due to incoming bulk-set-ack messages.",
 		})
 		mInBulkSetAckWritesOverridden := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InBulkSetAckWritesOverridden",
-			Help: "Count of writes from incoming bulk-set-ack messages that result in no change.",
+			Namespace: "Store",
+			Name:      "InBulkSetAckWritesOverridden",
+			Help:      "Count of writes from incoming bulk-set-ack messages that result in no change.",
 		})
 		mOutPullReplications := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "OutPullReplications",
-			Help: "Count of outgoing pull-replication messages.",
+			Namespace: "Store",
+			Name:      "OutPullReplications",
+			Help:      "Count of outgoing pull-replication messages.",
 		})
 		mOutPullReplicationSeconds := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "OutPullReplicationSeconds",
-			Help: "How long the last out pull replication pass took.",
+			Namespace: "Store",
+			Name:      "OutPullReplicationSeconds",
+			Help:      "How long the last out pull replication pass took.",
 		})
 		mInPullReplications := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InPullReplications",
-			Help: "Count of incoming pull-replication messages.",
+			Namespace: "Store",
+			Name:      "InPullReplications",
+			Help:      "Count of incoming pull-replication messages.",
 		})
 		mInPullReplicationDrops := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InPullReplicationDrops",
-			Help: "Count of incoming pull-replication messages droppped due to the local system being overworked at the time.",
+			Namespace: "Store",
+			Name:      "InPullReplicationDrops",
+			Help:      "Count of incoming pull-replication messages droppped due to the local system being overworked at the time.",
 		})
 		mInPullReplicationInvalids := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "InPullReplicationInvalids",
-			Help: "Count of incoming pull-replication messages that couldn't be parsed.",
+			Namespace: "Store",
+			Name:      "InPullReplicationInvalids",
+			Help:      "Count of incoming pull-replication messages that couldn't be parsed.",
 		})
 		mExpiredDeletions := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "ExpiredDeletions",
-			Help: "Count of recent deletes that have become old enough to be completely discarded.",
+			Namespace: "Store",
+			Name:      "ExpiredDeletions",
+			Help:      "Count of recent deletes that have become old enough to be completely discarded.",
 		})
 		mCompactions := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "Compactions",
-			Help: "Count of disk file sets compacted due to their contents exceeding a staleness threshold. For example, this happens when enough of the values have been overwritten or deleted in more recent operations.",
+			Namespace: "Store",
+			Name:      "Compactions",
+			Help:      "Count of disk file sets compacted due to their contents exceeding a staleness threshold. For example, this happens when enough of the values have been overwritten or deleted in more recent operations.",
 		})
 		mSmallFileCompactions := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "SmallFileCompactions",
-			Help: "Count of disk file sets compacted due to the entire file size being too small. For example, this may happen when the store is shutdown and restarted.",
+			Namespace: "Store",
+			Name:      "SmallFileCompactions",
+			Help:      "Count of disk file sets compacted due to the entire file size being too small. For example, this may happen when the store is shutdown and restarted.",
 		})
+		prometheus.Register(mRingChanges)
+		prometheus.Register(mRingChangeCloses)
+		prometheus.Register(mMsgToNodes)
+		prometheus.Register(mMsgToNodeNoRings)
+		prometheus.Register(mMsgToNodeNoNodes)
+		prometheus.Register(mMsgToOtherReplicas)
+		prometheus.Register(mMsgToOtherReplicasNoRings)
+		prometheus.Register(mListenErrors)
+		prometheus.Register(mIncomingConnections)
+		prometheus.Register(mDials)
+		prometheus.Register(mDialErrors)
+		prometheus.Register(mOutgoingConnections)
+		prometheus.Register(mMsgChanCreations)
+		prometheus.Register(mMsgToAddrs)
+		prometheus.Register(mMsgToAddrQueues)
+		prometheus.Register(mMsgToAddrTimeoutDrops)
+		prometheus.Register(mMsgToAddrShutdownDrops)
+		prometheus.Register(mMsgReads)
+		prometheus.Register(mMsgReadErrors)
+		prometheus.Register(mMsgWrites)
+		prometheus.Register(mMsgWriteErrors)
 		prometheus.Register(mValues)
 		prometheus.Register(mValueBytes)
 		prometheus.Register(mLookups)
@@ -342,7 +511,27 @@ func (s *OortGroupStore) start() {
 		for !tcpMsgRingStats.Shutdown {
 			time.Sleep(time.Minute)
 			tcpMsgRingStats = t.Stats(false)
-			log.Printf("%v\n", tcpMsgRingStats)
+			mRingChanges.Add(float64(tcpMsgRingStats.RingChanges))
+			mRingChangeCloses.Add(float64(tcpMsgRingStats.RingChangeCloses))
+			mMsgToNodes.Add(float64(tcpMsgRingStats.MsgToNodes))
+			mMsgToNodeNoRings.Add(float64(tcpMsgRingStats.MsgToNodeNoRings))
+			mMsgToNodeNoNodes.Add(float64(tcpMsgRingStats.MsgToNodeNoNodes))
+			mMsgToOtherReplicas.Add(float64(tcpMsgRingStats.MsgToOtherReplicas))
+			mMsgToOtherReplicasNoRings.Add(float64(tcpMsgRingStats.MsgToOtherReplicasNoRings))
+			mListenErrors.Add(float64(tcpMsgRingStats.ListenErrors))
+			mIncomingConnections.Add(float64(tcpMsgRingStats.IncomingConnections))
+			mDials.Add(float64(tcpMsgRingStats.Dials))
+			mDialErrors.Add(float64(tcpMsgRingStats.DialErrors))
+			mOutgoingConnections.Add(float64(tcpMsgRingStats.OutgoingConnections))
+			mMsgChanCreations.Add(float64(tcpMsgRingStats.MsgChanCreations))
+			mMsgToAddrs.Add(float64(tcpMsgRingStats.MsgToAddrs))
+			mMsgToAddrQueues.Add(float64(tcpMsgRingStats.MsgToAddrQueues))
+			mMsgToAddrTimeoutDrops.Add(float64(tcpMsgRingStats.MsgToAddrTimeoutDrops))
+			mMsgToAddrShutdownDrops.Add(float64(tcpMsgRingStats.MsgToAddrShutdownDrops))
+			mMsgReads.Add(float64(tcpMsgRingStats.MsgReads))
+			mMsgReadErrors.Add(float64(tcpMsgRingStats.MsgReadErrors))
+			mMsgWrites.Add(float64(tcpMsgRingStats.MsgWrites))
+			mMsgWriteErrors.Add(float64(tcpMsgRingStats.MsgWriteErrors))
 			stats, err := s.gs.Stats(context.Background(), false)
 			if err != nil {
 				log.Printf("stats error: %s\n", err)
@@ -394,6 +583,27 @@ func (s *OortGroupStore) start() {
 				log.Printf("%s\n", stats)
 			}
 		}
+		prometheus.Unregister(mRingChanges)
+		prometheus.Unregister(mRingChangeCloses)
+		prometheus.Unregister(mMsgToNodes)
+		prometheus.Unregister(mMsgToNodeNoRings)
+		prometheus.Unregister(mMsgToNodeNoNodes)
+		prometheus.Unregister(mMsgToOtherReplicas)
+		prometheus.Unregister(mMsgToOtherReplicasNoRings)
+		prometheus.Unregister(mListenErrors)
+		prometheus.Unregister(mIncomingConnections)
+		prometheus.Unregister(mDials)
+		prometheus.Unregister(mDialErrors)
+		prometheus.Unregister(mOutgoingConnections)
+		prometheus.Unregister(mMsgChanCreations)
+		prometheus.Unregister(mMsgToAddrs)
+		prometheus.Unregister(mMsgToAddrQueues)
+		prometheus.Unregister(mMsgToAddrTimeoutDrops)
+		prometheus.Unregister(mMsgToAddrShutdownDrops)
+		prometheus.Unregister(mMsgReads)
+		prometheus.Unregister(mMsgReadErrors)
+		prometheus.Unregister(mMsgWrites)
+		prometheus.Unregister(mMsgWriteErrors)
 		prometheus.Unregister(mValues)
 		prometheus.Unregister(mValueBytes)
 		prometheus.Unregister(mLookups)

@@ -34,13 +34,12 @@ service Api {
 message DirEnt {
     string name   = 1;
     uint64 parent = 2;
-    Attr   attr   = 3;
+    uint32 type   = 3;
 }
 
 // DirEntries just contains a list of directory entries
 message DirEntries {
     repeated DirEnt DirEntries  = 1;
-    repeated DirEnt FileEntries = 2;
 }
 
 // Attr
@@ -162,7 +161,6 @@ message ReadDirAllRequest {
 // ReadDirAllResponse
 message ReadDirAllResponse {
     repeated DirEnt DirEntries  = 1;
-    repeated DirEnt FileEntries = 2;
 }
 
 // SymlinkRequest
@@ -295,6 +293,7 @@ message DirEntry {
     string    name      = 2;
     bytes     id        = 3;
     Tombstone tombstone = 4; // If set, this record has been deleted
+    uint32    type      = 5;
 }
 
 // FileBlock
@@ -306,3 +305,98 @@ message FileBlock {
     uint32 checksum = 3;
 }
 
+// Message service definition for the FileSystemApi
+service FileSystemAPI {
+  rpc CreateFS (CreateFSRequest) returns (CreateFSResponse) {}
+  rpc ListFS (ListFSRequest) returns (ListFSResponse) {}
+  rpc ShowFS (ShowFSRequest) returns (ShowFSResponse) {}
+  rpc DeleteFS (DeleteFSRequest) returns (DeleteFSResponse) {}
+  rpc UpdateFS (UpdateFSRequest) returns (UpdateFSResponse) {}
+  rpc GrantAddrFS (GrantAddrFSRequest) returns (GrantAddrFSResponse) {}
+  rpc RevokeAddrFS (RevokeAddrFSRequest) returns (RevokeAddrFSResponse) {}
+}
+
+// ModFS ...
+message ModFS {
+  string    Name         = 1;
+  string    Status       = 2;
+}
+
+// Request to create a new filesystem
+message CreateFSRequest {
+  string  Token           = 1;
+  string  FSName          = 2;
+}
+
+// Response from creating a new filesystem
+message CreateFSResponse {
+  string  Data        = 1;
+}
+
+// Request a list of all file systems for a given account
+message ListFSRequest{
+  string  Token           = 1;
+}
+
+// Response for displaying a list of all an accounts file systems.
+message ListFSResponse {
+  string  Data    = 1;
+}
+
+// Request to show the specific details about a file system
+message ShowFSRequest{
+  string  Token           = 1;
+  string  FSid            = 2;
+}
+
+// Response for a specific file system for an account.
+message ShowFSResponse {
+  string  Data    = 1;
+}
+
+// Request to delete a specific file system
+message DeleteFSRequest {
+  string  Token         = 1;
+  string  FSid          = 2;
+}
+
+// Response from deleting a file system
+message DeleteFSResponse {
+  string  Data         = 1;
+}
+
+// Request to update a specific file system's information
+message UpdateFSRequest {
+  string  Token           = 1;
+  string  FSid            = 2;
+  ModFS   Filesys         = 4;
+}
+
+// Response from an update operation
+message UpdateFSResponse {
+  string  Data       = 1;
+}
+
+// Request grant an ip address access to a file system
+message GrantAddrFSRequest {
+  string  Token      = 1;
+  string  FSid       = 2;
+  string  Addr       = 3;
+}
+
+// Response from granting ip address access to a file system
+message GrantAddrFSResponse {
+  string  Data          = 1;
+}
+
+// Request revoke an ip address access to a file system
+message RevokeAddrFSRequest {
+  string Token      = 1;
+  string FSid       = 2;
+  string Addr       = 3;
+}
+
+// Response from revoking ip address access to a file system
+message RevokeAddrFSResponse {
+  string  Data     = 1;
+}

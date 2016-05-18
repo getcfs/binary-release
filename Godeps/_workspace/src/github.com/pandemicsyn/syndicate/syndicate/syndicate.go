@@ -510,6 +510,37 @@ func (s *Server) SetActive(c context.Context, n *pb.Node) (*pb.RingStatus, error
 	return &pb.RingStatus{Status: true, Version: s.r.Version()}, nil
 }
 
+func (s *Server) SetReplicas(c context.Context, n *pb.RingOpts) (*pb.RingStatus, error) {
+	s.Lock()
+	defer s.Unlock()
+	b, err := s.getBuilderFn(fmt.Sprintf("%s/%s.builder", s.cfg.RingDir, s.servicename))
+	if err != nil {
+		s.ctxlog.WithFields(log.Fields{
+			"path": fmt.Sprintf("%s/%s.builder", s.cfg.RingDir, s.servicename),
+			"err":  err,
+		}).Warning("Unable to load builder for change")
+		return &pb.RingStatus{Status: false, Version: s.r.Version()}, err
+	}
+	b.SetReplicaCount(int(n.Replicas))
+	newRing := b.Ring()
+	s.ctxlog.WithFields(log.Fields{
+		"replicas":         n.Replicas,
+		"proposed-ringver": newRing.Version(),
+	}).Info("attempting to apply ring version")
+	err = s.applyRingChange(&RingChange{b: b, r: newRing, v: newRing.Version()})
+	if err != nil {
+		s.ctxlog.WithFields(log.Fields{
+			"replicas":         n.Replicas,
+			"proposed-ringver": newRing.Version(),
+			"ringver":          s.r.Version(),
+			"err":              err,
+		}).Warning("failed to apply ring change")
+		return &pb.RingStatus{Status: false, Version: s.r.Version()}, err
+	}
+	s.ctxlog.WithField("ringver", s.r.Version()).Info("updated ring")
+	return &pb.RingStatus{Status: true, Version: s.r.Version()}, nil
+}
+
 func (s *Server) SetCapacity(c context.Context, n *pb.Node) (*pb.RingStatus, error) {
 	s.Lock()
 	defer s.Unlock()

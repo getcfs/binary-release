@@ -43,30 +43,36 @@ func helpCmd() error {
 	u, _ := user.Current()
 	return fmt.Errorf(`I'm sorry %s, I'm afraid I can't do that. Valid commands are:
 
-start <cmdctrladdress> #attempts to start the remote nodes backend
-stop <cmdctrladdress> #attempts to stop the remote nodes backend
-restart <cmdctrladdress> #attempts to restart the remote nodes backend
-exit <cmdctrladdress> #attempts to exit the remote node
-ccupgrade <cmdctrladdress> <github version string> #DEPRECATED asks the node to upgrade itself 
-ccsoftwareversion  <cmdctrladdress> #DEPRECATED gets the currently running version from the node
-version			#print version
-config          #print ring config
-config <nodeid> #uses uint64 id
-search			#lists all
+# cmdctrl based commands
+start <cmdctrladdress>      #attempts to start the remote nodes backend
+stop <cmdctrladdress>       #attempts to stop the remote nodes backend
+restart <cmdctrladdress>    #attempts to restart the remote nodes backend
+exit <cmdctrladdress>       #attempts to exit the remote node
+ccupgrade <ccaddr> <ver>    #DEPRECATED asks the node to upgrade itself 
+ccsoftwareversion <ccaddr>  #DEPRECATED gets the currently running version from the node
+
+# syndicate based cluster wide commands
+softwareversion             #gets all currently running versions from nodes
+upgradesoftware <version>   #asks all currently running nodes to upgrade too <version-string>
+version                     #print version
+config                      #print ring config
+search                      #lists all nodes
 search id=<nodeid>
 search meta=<metastring>
 search tier=<string> or search tierX=<string>
 search address=<string> or search addressX=<string>
 search any of the above K/V combos
-watch ring
+watch ringVersion           #get a stream of ring changes
+set replicas=<replicacount> #set the rings replica count
+set config=./path/to/config #set the rings config
+
+# syndicate node specific commands
+config <nodeid>             #print a nodes config
 rm <nodeid>
 active <nodeid> true|false
 capacity <nodeid> <uint32>
 addrs <nodeid> 1.1.1.1,2.2.2.2,...
 tiers <nodeid> SomeTier,SomeTier2,...
-set config=./path/to/config
-softwareversion #gets all currently running versions from nodes
-upgradesoftware <version-string> #asks all currently running nodes to upgrade too <version-string>
 `, u.Username)
 }
 
@@ -256,6 +262,15 @@ func (s *SyndClient) mainEntry(args []string) error {
 					return fmt.Errorf("Error reading config file: %v", err)
 				}
 				s.SetConfig(conf, false)
+			case "replicas":
+				count, err := strconv.Atoi(sarg[1])
+				if err != nil {
+					return err
+				}
+				if count < 1 {
+					return fmt.Errorf("invalid <count> %d", count)
+				}
+				return s.setReplicasCmd(count)
 			}
 		}
 		return nil
