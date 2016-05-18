@@ -8,6 +8,7 @@ service Syndicate {
     rpc RemoveNode(Node) returns (RingStatus) {}
     rpc ModNode(ModifyMsg) returns (RingStatus) {}
     rpc SetConf(Conf) returns (RingStatus) {}
+    rpc SetReplicas(RingOpts) returns (RingStatus) {}
     rpc SetActive(Node) returns (RingStatus) {}
     rpc SetCapacity(Node) returns (RingStatus) {}
     rpc ReplaceAddresses(Node) returns (RingStatus) {}
@@ -28,6 +29,10 @@ message EmptyMsg {}
 message RingStatus {
     bool status = 1;
     int64 version = 2;
+}
+
+message RingOpts {
+    int32 replicas = 1;
 }
 
 message Node {

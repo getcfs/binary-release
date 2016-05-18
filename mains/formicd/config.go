@@ -7,8 +7,9 @@ import (
 )
 
 type config struct {
-	path                       string
-	port                       int
+	path string
+	port int
+	//	fsPort                     int
 	oortValueSyndicate         string
 	oortGroupSyndicate         string
 	insecureSkipVerify         bool
