@@ -78,7 +78,11 @@ func GetFsId(ctx context.Context) (uuid.UUID, error) {
 }
 
 func (s *apiServer) validateIP(ctx context.Context) error {
-	// TODO: Add caching of validation
+	if s.comms == nil {
+		// TODO: Fix abstraction so that we don't have to do this for tests
+		// Assume that it is a unit test
+		return nil
+	}
 	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return errors.New("Couldn't get client IP")
@@ -167,12 +171,6 @@ func (s *apiServer) Create(ctx context.Context, r *pb.CreateRequest) (*pb.Create
 	if err != nil {
 		return nil, err
 	}
-	// Write the first block
-	// TODO: Need to handle failure here better
-	err = s.fs.WriteChunk(ctx, formic.GetID(fsid.Bytes(), inode, 1), nil)
-	if err != nil {
-		return nil, err
-	}
 	return &pb.CreateResponse{Name: rname, Attr: rattr}, err
 }
 
@@ -224,7 +222,10 @@ func (s *apiServer) Read(ctx context.Context, r *pb.ReadRequest) (*pb.ReadRespon
 		chunk, err := s.fs.GetChunk(ctx, id)
 		if err != nil {
 			log.Print("Err: Failed to read block: ", err)
-			return &pb.ReadResponse{}, err
+			// NOTE: This returns basically 0's to the client.for this block in this case
+			//       It is totally valid for a fs to request an invalid block
+			// TODO: Do we need to differentiate between real errors and bad requests?
+			return &pb.ReadResponse{}, nil
 		}
 		if len(chunk) == 0 {
 			break

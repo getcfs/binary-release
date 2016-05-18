@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 
 	"golang.org/x/net/context"
 
@@ -128,6 +129,17 @@ func (ds *TestFS) Rename(ctx context.Context, oldParent, newParent []byte, oldNa
 	return &pb.RenameResponse{}, nil
 }
 
+type fakePeerAddr struct {
+}
+
+func (f fakePeerAddr) Network() string {
+	return "localhost"
+}
+
+func (f fakePeerAddr) String() string {
+	return "127.0.0.1:1234"
+}
+
 func getContext() context.Context {
 	fsid := uuid.NewV4()
 	c, _ := context.WithTimeout(context.Background(), 5*time.Second)
@@ -135,6 +147,10 @@ func getContext() context.Context {
 		c,
 		metadata.Pairs("fsid", fsid.String()),
 	)
+	p := &peer.Peer{
+		Addr: fakePeerAddr{},
+	}
+	c = peer.NewContext(c, p)
 	return c
 }
 
@@ -151,7 +167,7 @@ func TestGetID(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
-	api := NewApiServer(NewTestFS(), 1)
+	api := NewApiServer(NewTestFS(), 1, nil)
 	_, err := api.Create(getContext(), &pb.CreateRequest{Parent: 1, Name: "Test", Attr: &pb.Attr{Gid: 1001, Uid: 1001}})
 	if err != nil {
 		t.Error("Create Failed: ", err)
@@ -161,7 +177,7 @@ func TestCreate(t *testing.T) {
 
 func TestWrite_Basic(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 10
 	chunk := pb.WriteRequest{
 		Inode:   0,
@@ -197,7 +213,7 @@ func TestWrite_Basic(t *testing.T) {
 
 func TestWrite_Chunk(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 5
 	chunk := pb.WriteRequest{
 		Inode:   0,
@@ -223,7 +239,7 @@ func TestWrite_Chunk(t *testing.T) {
 
 func TestWrite_Offset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 10
 	chunk := pb.WriteRequest{
 		Offset:  5,
@@ -263,7 +279,7 @@ func TestWrite_Offset(t *testing.T) {
 
 func TestWrite_MultiOffset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 20
 	chunk := pb.WriteRequest{
 		Offset:  5,
@@ -285,7 +301,7 @@ func TestWrite_MultiOffset(t *testing.T) {
 
 func TestRead_Basic(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 10
 	write := []byte("0123456789")
 	fs.addread(write)
@@ -300,7 +316,7 @@ func TestRead_Basic(t *testing.T) {
 
 func TestRead_Offset(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 10
 	write := []byte("0123456789")
 	fs.addread(write)
@@ -315,7 +331,7 @@ func TestRead_Offset(t *testing.T) {
 
 func TestRead_Chunk(t *testing.T) {
 	fs := NewTestFS()
-	api := NewApiServer(fs, 1)
+	api := NewApiServer(fs, 1, nil)
 	api.blocksize = 10
 	write1 := []byte("0123456789")
 	write2 := []byte("9876543210")

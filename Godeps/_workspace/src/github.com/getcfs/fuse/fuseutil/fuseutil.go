@@ -1,7 +1,7 @@
 package fuseutil
 
 import (
-	"bazil.org/fuse"
+	"github.com/getcfs/fuse"
 )
 
 // HandleRead handles a read request assuming that data is the entire file content.

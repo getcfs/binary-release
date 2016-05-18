@@ -73,6 +73,20 @@ func (s *SyndClient) rmNodeCmd(id uint64) error {
 	return nil
 }
 
+func (s *SyndClient) setReplicasCmd(count int) error {
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	c, err := s.client.SetReplicas(ctx, &pb.RingOpts{Replicas: int32(count)})
+	if err != nil {
+		return err
+	}
+	report := [][]string{
+		[]string{"Status:", fmt.Sprintf("%v", c.Status)},
+		[]string{"Version:", fmt.Sprintf("%v", c.Version)},
+	}
+	fmt.Print(brimtext.Align(report, nil))
+	return nil
+}
+
 func (s *SyndClient) setActiveCmd(id uint64, active bool) error {
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	c, err := s.client.SetActive(ctx, &pb.Node{Id: id, Active: active})

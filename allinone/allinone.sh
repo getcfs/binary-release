@@ -93,14 +93,6 @@ git clone git@github.com:$GIT_USER/formic.git
 cd formic
 git remote add upstream git@github.com:creiht/formic.git
 
-echo "Setting up oohhc repos"
-mkdir -p $GOPATH/src/github.com/letterj
-cd $GOPATH/src/github.com/letterj
-git clone git@github.com:$GIT_USER/oohhc.git
-cd oohhc
-git remote add upstream git@github.com:letterj/oohhc.git
-make deps
-
 echo "Setting up cfs-binary-release repo"
 mkdir -p $GOPATH/src/github.com/getcfs/cfs-binary-release
 cd $GOPATH/src/github.com/getcfs
@@ -165,18 +157,6 @@ ln -s /etc/syndicate/cfssl/ca.pem /var/lib/formic/ca.pem
 ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/formic/client.key
 ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/formic/client.crt
 
-echo "Installing oohhc-acctd, oohhc-filesysd & oohhc-cli"
-go get github.com/letterj/oohhc/oohhc-filesysd
-go install github.com/letterj/oohhc/oohhc-filesysd
-cp -av $GOPATH/src/github.com/letterj/oohhc/packaging/root/usr/share/oohhc/systemd/oohhc-filesysd.service /lib/systemd/system
-# setup keys and certs for oohhc
-mkdir -p /var/lib/oohhc-filesys
-ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-filesys/server.key
-ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-filesys/server.crt
-ln -s /etc/syndicate/cfssl/ca.pem /var/lib/oohhc-filesys/ca.pem
-ln -s /etc/syndicate/cfssl/localhost-key.pem /var/lib/oohhc-filesys/client.key
-ln -s /etc/syndicate/cfssl/localhost.pem /var/lib/oohhc-filesys/client.crt
-
 # Adding some helpful git stuff to the .bashrc
 if [ "$FANCYPROMPT" = "yes" ]; then
     echo "" >> ~/.bashrc
@@ -216,7 +196,6 @@ echo "systemctl start synd"
 echo "systemctl start oort-valued"
 echo "systemctl start oort-groupd"
 echo "systemctl start formicd"
-echo "systemctl start oohhc-filesysd"
 echo
 echo "Create a mount directory"
 echo "mkdir -p /mnt/cfsdrive"
