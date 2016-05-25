@@ -284,13 +284,14 @@ func (o *OortFS) Create(ctx context.Context, parent, id []byte, inode uint64, na
 		// TODO: Needs beter error handling
 		return "", &pb.Attr{}, err
 	}
-	if len(b) > 0 {
-		return "", &pb.Attr{}, nil
-	}
 	p := &pb.DirEntry{}
 	err = proto.Unmarshal(b, p)
 	if err != nil {
 		return "", &pb.Attr{}, err
+	}
+	// Return an error if entry already exists and is not a tombstone
+	if len(b) > 0 && p.Tombstone == nil {
+		return "", &pb.Attr{}, nil
 	}
 	var direntType fuse.DirentType
 	if isdir {

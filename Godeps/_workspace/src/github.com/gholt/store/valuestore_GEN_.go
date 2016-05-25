@@ -453,6 +453,10 @@ func (store *defaultValueStore) read(keyA uint64, keyB uint64, value []byte) (ui
 }
 
 func (store *defaultValueStore) Write(ctx context.Context, keyA uint64, keyB uint64, timestampmicro int64, value []byte) (int64, error) {
+	if len(value) == 0 {
+		store.logError("REMOVEME was asked to store a zlv %x %x %x", keyA, keyB, timestampmicro)
+		panic("REMOVEME was asked to store a zlv")
+	}
 	atomic.AddInt32(&store.writes, 1)
 	if timestampmicro < TIMESTAMPMICRO_MIN {
 		atomic.AddInt32(&store.writeErrors, 1)
@@ -964,7 +968,9 @@ func (store *defaultValueStore) recovery() error {
 					atomic.AddInt64(&encounteredValues, 1)
 					// REMOVEME zlv check and discard, for now
 					if wr.TimestampBits&_TSB_DELETION == 0 && wr.Length == 0 {
-						atomic.AddInt64(&zeroLengthValues, 1)
+						if atomic.AddInt64(&zeroLengthValues, 1) < 10 {
+							store.logError("REMOVEME encountered zlv %x %x %x", wr.KeyA, wr.KeyB, wr.TimestampBits)
+						}
 						continue
 					}
 					if store.logDebugOn {
@@ -1046,10 +1052,10 @@ func (store *defaultValueStore) recovery() error {
 	if len(compactNames) > 0 {
 		store.logDebug("recovery: secondary recovery started for %d files.", len(compactNames))
 		for i, name := range compactNames {
-			store.compactFile(name, compactBlockIDs[i], make(chan struct{}))
+			store.compactFile(name, compactBlockIDs[i], make(chan struct{}), "recovery")
 		}
 		store.logDebug("recovery: secondary recovery completed.")
 	}
-	fmt.Println("REMOVEME encountered", encounteredValues, "values,", zeroLengthValues, "were zero-length")
+	store.logError("REMOVEME encountered %d values, %d were zero-length", encounteredValues, zeroLengthValues)
 	return nil
 }

@@ -84,6 +84,10 @@ func (d *Deletinator) run() {
 			continue
 		}
 		ts := dirent.Tombstone
+		if ts == nil {
+			// TODO: probably an overwrite. just remove old file
+			continue
+		}
 		deleted := uint64(0)
 		for b := uint64(0); b < ts.Blocks; b++ {
 			// Delete each block
