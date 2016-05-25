@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io/ioutil"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -11,8 +12,6 @@ import (
 type Command struct {
 	// The name of the command
 	Name string
-	// short name of the command. Typically one character (deprecated, use `Aliases`)
-	ShortName string
 	// A list of aliases for the command
 	Aliases []string
 	// A short description of the usage of this command
@@ -34,10 +33,7 @@ type Command struct {
 	// It is run even if Action() panics
 	After AfterFunc
 	// The function to call when this command is invoked
-	Action interface{}
-	// TODO: replace `Action: interface{}` with `Action: ActionFunc` once some kind
-	// of deprecation period has passed, maybe?
-
+	Action ActionFunc
 	// Execute this function if a usage error occurs.
 	OnUsageError OnUsageErrorFunc
 	// List of child commands
@@ -74,7 +70,7 @@ func (c Command) Run(ctx *Context) (err error) {
 		return c.startApp(ctx)
 	}
 
-	if !c.HideHelp && (HelpFlag != BoolFlag{}) {
+	if !c.HideHelp && !reflect.DeepEqual(HelpFlag, BoolFlag{}) {
 		// append help to flags
 		c.Flags = append(
 			c.Flags,
@@ -89,42 +85,10 @@ func (c Command) Run(ctx *Context) (err error) {
 	set := flagSet(c.Name, c.Flags)
 	set.SetOutput(ioutil.Discard)
 
-	if !c.SkipFlagParsing {
-		firstFlagIndex := -1
-		terminatorIndex := -1
-		for index, arg := range ctx.Args() {
-			if arg == "--" {
-				terminatorIndex = index
-				break
-			} else if arg == "-" {
-				// Do nothing. A dash alone is not really a flag.
-				continue
-			} else if strings.HasPrefix(arg, "-") && firstFlagIndex == -1 {
-				firstFlagIndex = index
-			}
-		}
-
-		if firstFlagIndex > -1 {
-			args := ctx.Args()
-			regularArgs := make([]string, len(args[1:firstFlagIndex]))
-			copy(regularArgs, args[1:firstFlagIndex])
-
-			var flagArgs []string
-			if terminatorIndex > -1 {
-				flagArgs = args[firstFlagIndex:terminatorIndex]
-				regularArgs = append(regularArgs, args[terminatorIndex:]...)
-			} else {
-				flagArgs = args[firstFlagIndex:]
-			}
-
-			err = set.Parse(append(flagArgs, regularArgs...))
-		} else {
-			err = set.Parse(ctx.Args().Tail())
-		}
+	if c.SkipFlagParsing {
+		err = set.Parse(append([]string{"--"}, ctx.Args().Tail()...))
 	} else {
-		if c.SkipFlagParsing {
-			err = set.Parse(append([]string{"--"}, ctx.Args().Tail()...))
-		}
+		err = set.Parse(ctx.Args().Tail())
 	}
 
 	if err != nil {
@@ -133,7 +97,7 @@ func (c Command) Run(ctx *Context) (err error) {
 			HandleExitCoder(err)
 			return err
 		}
-		fmt.Fprintln(ctx.App.Writer, "Incorrect Usage.")
+		fmt.Fprintf(ctx.App.Writer, "Incorrect Usage: %s\n\n", err)
 		fmt.Fprintln(ctx.App.Writer)
 		ShowCommandHelp(ctx, c.Name)
 		return err
@@ -183,7 +147,7 @@ func (c Command) Run(ctx *Context) (err error) {
 	}
 
 	context.Command = c
-	err = HandleAction(c.Action, context)
+	err = c.Action(context)
 
 	if err != nil {
 		HandleExitCoder(err)
@@ -194,15 +158,10 @@ func (c Command) Run(ctx *Context) (err error) {
 // Names returns the names including short names and aliases.
 func (c Command) Names() []string {
 	names := []string{c.Name}
-
-	if c.ShortName != "" {
-		names = append(names, c.ShortName)
-	}
-
 	return append(names, c.Aliases...)
 }
 
-// HasName returns true if Command.Name or Command.ShortName matches given name
+// HasName returns true if Command.Name matches given name
 func (c Command) HasName(name string) bool {
 	for _, n := range c.Names() {
 		if n == name {
@@ -240,8 +199,6 @@ func (c Command) startApp(ctx *Context) error {
 	app.Version = ctx.App.Version
 	app.HideVersion = ctx.App.HideVersion
 	app.Compiled = ctx.App.Compiled
-	app.Author = ctx.App.Author
-	app.Email = ctx.App.Email
 	app.Writer = ctx.App.Writer
 
 	app.categories = CommandCategories{}

@@ -174,6 +174,7 @@ func (s *FileSystemAPIServer) CreateFS(ctx context.Context, r *pb.CreateFSReques
 // ShowFS ...
 func (s *FileSystemAPIServer) ShowFS(ctx context.Context, r *pb.ShowFSRequest) (*pb.ShowFSResponse, error) {
 	var err error
+	var acctID string
 	srcAddr := ""
 
 	// Get incomming ip
@@ -183,7 +184,7 @@ func (s *FileSystemAPIServer) ShowFS(ctx context.Context, r *pb.ShowFSRequest) (
 	}
 
 	// Validate Token
-	_, err = s.validateToken(r.Token)
+	acctID, err = s.validateToken(r.Token)
 	if err != nil {
 		log.Printf("%s SHOW FAILED %s\n", srcAddr, "PermissionDenied")
 		return nil, errf(codes.PermissionDenied, "%v", "Invalid Token")
@@ -214,6 +215,12 @@ func (s *FileSystemAPIServer) ShowFS(ctx context.Context, r *pb.ShowFSRequest) (
 	if err != nil {
 		log.Printf("%s SHOW FAILED %v\n", srcAddr, err)
 		return nil, errf(codes.Internal, "%v", err)
+	}
+
+	// Validate Token/Account own the file system
+	if fsRef.AcctID != acctID {
+		log.Printf("$s SHOW FAILED %v ACCOUNT MISMATCH", fs.ID)
+		return nil, errf(codes.FailedPrecondition, "%v", "Account Mismatch")
 	}
 	fs.AcctID = fsRef.AcctID
 
@@ -385,6 +392,8 @@ func (s *FileSystemAPIServer) DeleteFS(ctx context.Context, r *pb.DeleteFSReques
 		return nil, errf(codes.PermissionDenied, "%v", "Invalid Token")
 	}
 
+	// Validate Token/Account own this file system
+
 	// Prep things to return
 	// Log Operation
 	log.Printf("%s DELETE NOTIMPLEMENTED %s\n", srcAddr, r.FSid)
@@ -408,6 +417,8 @@ func (s *FileSystemAPIServer) UpdateFS(ctx context.Context, r *pb.UpdateFSReques
 		return nil, errf(codes.PermissionDenied, "%v", "Invalid Token")
 	}
 
+	// validate that Token/Account own this file system
+
 	// return message
 	// Log Operation
 	log.Printf("%s UPDATE NOTIMPLEMENTED %s\n", srcAddr, r.FSid)
@@ -417,6 +428,9 @@ func (s *FileSystemAPIServer) UpdateFS(ctx context.Context, r *pb.UpdateFSReques
 // GrantAddrFS ...
 func (s *FileSystemAPIServer) GrantAddrFS(ctx context.Context, r *pb.GrantAddrFSRequest) (*pb.GrantAddrFSResponse, error) {
 	var err error
+	var acctID string
+	var fsRef FileSysRef
+	var value []byte
 	var addrData AddrRef
 	var addrByte []byte
 	srcAddr := ""
@@ -427,17 +441,41 @@ func (s *FileSystemAPIServer) GrantAddrFS(ctx context.Context, r *pb.GrantAddrFS
 		srcAddr = pr.Addr.String()
 	}
 	// validate token
-	_, err = s.validateToken(r.Token)
+	acctID, err = s.validateToken(r.Token)
 	if err != nil {
 		log.Printf("%s GRANT FAILED %s\n", srcAddr, "PermissionDenied")
 		return nil, errf(codes.PermissionDenied, "%v", "Invalid Token")
 	}
 
+	// Validate Token/Account own the file system
+	// Read FileSysRef entry to determine if it exists
+	pKey := fmt.Sprintf("/fs")
+	pKeyA, pKeyB := murmur3.Sum128([]byte(pKey))
+	cKeyA, cKeyB := murmur3.Sum128([]byte(r.FSid))
+	_, value, err = s.gstore.Read(context.Background(), pKeyA, pKeyB, cKeyA, cKeyB, nil)
+	if store.IsNotFound(err) {
+		log.Printf("%s GRANT FAILED %s NOTFOUND", srcAddr, r.FSid)
+		return nil, errf(codes.NotFound, "%v", "Not Found")
+	}
+	if err != nil {
+		log.Printf("%s GRANT FAILED %v\n", srcAddr, err)
+		return nil, errf(codes.Internal, "%v", err)
+	}
+	err = json.Unmarshal(value, &fsRef)
+	if err != nil {
+		log.Printf("%s GRANT FAILED %v\n", srcAddr, err)
+		return nil, errf(codes.Internal, "%v", err)
+	}
+	if fsRef.AcctID != acctID {
+		log.Printf("$s GRANT FAILED %v ACCOUNT MISMATCH", r.FSid)
+		return nil, errf(codes.FailedPrecondition, "%v", "Account Mismatch")
+	}
+
 	// GRANT an file system entry for the addr
 	// 		write /fs/FSID/addr			addr						AddrRef
-	pKey := fmt.Sprintf("/fs/%s/addr", r.FSid)
-	pKeyA, pKeyB := murmur3.Sum128([]byte(pKey))
-	cKeyA, cKeyB := murmur3.Sum128([]byte(r.Addr))
+	pKey = fmt.Sprintf("/fs/%s/addr", r.FSid)
+	pKeyA, pKeyB = murmur3.Sum128([]byte(pKey))
+	cKeyA, cKeyB = murmur3.Sum128([]byte(r.Addr))
 	timestampMicro := brimtime.TimeToUnixMicro(time.Now())
 	addrData.Addr = r.Addr
 	addrData.FSID = r.FSid
@@ -461,6 +499,9 @@ func (s *FileSystemAPIServer) GrantAddrFS(ctx context.Context, r *pb.GrantAddrFS
 // RevokeAddrFS ...
 func (s *FileSystemAPIServer) RevokeAddrFS(ctx context.Context, r *pb.RevokeAddrFSRequest) (*pb.RevokeAddrFSResponse, error) {
 	var err error
+	var acctID string
+	var value []byte
+	var fsRef FileSysRef
 	srcAddr := ""
 
 	// Get incomming ip
@@ -469,17 +510,40 @@ func (s *FileSystemAPIServer) RevokeAddrFS(ctx context.Context, r *pb.RevokeAddr
 		srcAddr = pr.Addr.String()
 	}
 	// Validate Token
-	_, err = s.validateToken(r.Token)
+	acctID, err = s.validateToken(r.Token)
 	if err != nil {
 		log.Printf("%s REVOKE FAILED %s\n", srcAddr, "PermissionDenied")
 		return nil, errf(codes.PermissionDenied, "%v", "Invalid Token")
 	}
+	// Validate Token/Account owns this file system
+	// Read FileSysRef entry to determine if it exists
+	pKey := fmt.Sprintf("/fs")
+	pKeyA, pKeyB := murmur3.Sum128([]byte(pKey))
+	cKeyA, cKeyB := murmur3.Sum128([]byte(r.FSid))
+	_, value, err = s.gstore.Read(context.Background(), pKeyA, pKeyB, cKeyA, cKeyB, nil)
+	if store.IsNotFound(err) {
+		log.Printf("%s REVOKE FAILED %s NOTFOUND", srcAddr, r.FSid)
+		return nil, errf(codes.NotFound, "%v", "Not Found")
+	}
+	if err != nil {
+		log.Printf("%s REVOKE FAILED %v\n", srcAddr, err)
+		return nil, errf(codes.Internal, "%v", err)
+	}
+	err = json.Unmarshal(value, &fsRef)
+	if err != nil {
+		log.Printf("%s REVOKE FAILED %v\n", srcAddr, err)
+		return nil, errf(codes.Internal, "%v", err)
+	}
+	if fsRef.AcctID != acctID {
+		log.Printf("$s REVOKE FAILED %v ACCOUNT MISMATCH", r.FSid)
+		return nil, errf(codes.FailedPrecondition, "%v", "Account Mismatch")
+	}
 
 	// REVOKE an file system entry for the addr
 	// 		delete /fs/FSID/addr			addr						AddrRef
-	pKey := fmt.Sprintf("/fs/%s/addr", r.FSid)
-	pKeyA, pKeyB := murmur3.Sum128([]byte(pKey))
-	cKeyA, cKeyB := murmur3.Sum128([]byte(r.Addr))
+	pKey = fmt.Sprintf("/fs/%s/addr", r.FSid)
+	pKeyA, pKeyB = murmur3.Sum128([]byte(pKey))
+	cKeyA, cKeyB = murmur3.Sum128([]byte(r.Addr))
 	timestampMicro := brimtime.TimeToUnixMicro(time.Now())
 	_, err = s.gstore.Delete(context.Background(), pKeyA, pKeyB, cKeyA, cKeyB, timestampMicro)
 	if store.IsNotFound(err) {

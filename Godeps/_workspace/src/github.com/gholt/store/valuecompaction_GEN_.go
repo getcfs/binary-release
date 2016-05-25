@@ -201,7 +201,7 @@ func (store *defaultValueStore) compactionWorker(jobChan chan *valueCompactionJo
 			}
 			atomic.AddInt32(&store.compactions, 1)
 		}
-		store.compactFile(c.nametoc, c.candidateBlockID, controlChan)
+		store.compactFile(c.nametoc, c.candidateBlockID, controlChan, "compactionWorker")
 	}
 	wg.Done()
 }
@@ -280,7 +280,7 @@ func (store *defaultValueStore) needsCompaction(nametoc string, candidateBlockID
 	return stale > uint32(float64(checked)*store.compactionState.threshold)
 }
 
-func (store *defaultValueStore) compactFile(nametoc string, blockID uint32, controlChan chan struct{}) {
+func (store *defaultValueStore) compactFile(nametoc string, blockID uint32, controlChan chan struct{}, removemeCaller string) {
 	var readErrorCount uint32
 	var writeErrorCount uint32
 	var count uint32
@@ -320,7 +320,7 @@ func (store *defaultValueStore) compactFile(nametoc string, blockID uint32, cont
 						continue
 					}
 					timestampBits, value, err := store.read(wr.KeyA, wr.KeyB, value[:0])
-					if err != nil {
+					if err != nil && !IsNotFound(err) {
 						store.logError("compactFile: error reading while compacting %s: %s", nametoc, err)
 						atomic.AddUint32(&readErrorCount, 1)
 						// Keeps going, but the readErrorCount will let it know
@@ -360,11 +360,8 @@ func (store *defaultValueStore) compactFile(nametoc string, blockID uint32, cont
 	fullpath := path.Join(store.path, nametoc[:len(nametoc)-3])
 	fullpathtoc := path.Join(store.pathtoc, nametoc)
 	spindown := func(remove bool) {
-		for i := 0; i < len(pendingBatchChans); i++ {
-			pendingBatchChans[i] <- nil
-		}
-		wg.Wait()
 		if remove {
+			store.logError("REMOVEME: removing %s due to compaction triggered by %s", fullpathtoc, removemeCaller)
 			if err := store.remove(fullpathtoc); err != nil {
 				store.logError("compactFile: unable to remove %s %s", fullpathtoc, err)
 				if err = store.rename(fullpathtoc, fullpathtoc+".renamed"); err != nil {
@@ -406,6 +403,10 @@ func (store *defaultValueStore) compactFile(nametoc string, blockID uint32, cont
 		return
 	default:
 	}
+	for i := 0; i < len(pendingBatchChans); i++ {
+		pendingBatchChans[i] <- nil
+	}
+	wg.Wait()
 	if rec := atomic.LoadUint32(&readErrorCount); rec > 0 {
 		// TODO: Eventually, as per the note above, this should remove the
 		// unable-to-be-read entries from the locmap so replication can repair

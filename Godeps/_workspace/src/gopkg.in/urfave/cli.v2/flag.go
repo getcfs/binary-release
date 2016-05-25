@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -12,6 +14,12 @@ import (
 )
 
 const defaultPlaceholder = "value"
+
+var (
+	slPfx = fmt.Sprintf("sl:::%d:::", time.Now().UTC().UnixNano())
+
+	commaWhitespace = regexp.MustCompile("[, ]+.*")
+)
 
 // BashCompletionFlag enables bash-completion for all commands and subcommands
 var BashCompletionFlag = BoolFlag{
@@ -21,21 +29,28 @@ var BashCompletionFlag = BoolFlag{
 
 // VersionFlag prints the version for the application
 var VersionFlag = BoolFlag{
-	Name:  "version, v",
-	Usage: "print the version",
+	Name:    "version",
+	Aliases: []string{"v"},
+	Usage:   "print the version",
 }
 
-// HelpFlag prints the help for all commands and subcommands
-// Set to the zero value (BoolFlag{}) to disable flag -- keeps subcommand
-// unless HideHelp is set to true)
+// HelpFlag prints the help for all commands and subcommands.
+// Set to the zero value (BoolFlag{}) to disable the flag.  The subcommand
+// will still be added unless HideHelp is set to true.
 var HelpFlag = BoolFlag{
-	Name:  "help, h",
-	Usage: "show help",
+	Name:    "help",
+	Aliases: []string{"h"},
+	Usage:   "show help",
 }
 
 // FlagStringer converts a flag definition to a string. This is used by help
 // to display a flag.
 var FlagStringer FlagStringFunc = stringifyFlag
+
+// Serializeder is used to circumvent the limitations of flag.FlagSet.Set
+type Serializeder interface {
+	Serialized() string
+}
 
 // Flag is a common interface related to parsing flags in cli.
 // For more advanced flag parsing techniques, it is recommended that
@@ -44,7 +59,7 @@ type Flag interface {
 	fmt.Stringer
 	// Apply Flag settings to the given flag set
 	Apply(*flag.FlagSet)
-	GetName() string
+	Names() []string
 }
 
 func flagSet(name string, flags []Flag) *flag.FlagSet {
@@ -56,14 +71,6 @@ func flagSet(name string, flags []Flag) *flag.FlagSet {
 	return set
 }
 
-func eachName(longName string, fn func(string)) {
-	parts := strings.Split(longName, ",")
-	for _, name := range parts {
-		name = strings.Trim(name, " ")
-		fn(name)
-	}
-}
-
 // Generic is a generic parseable type identified by a specific flag
 type Generic interface {
 	Set(value string) error
@@ -72,11 +79,12 @@ type Generic interface {
 
 // GenericFlag is the flag type for types implementing Generic
 type GenericFlag struct {
-	Name   string
-	Value  Generic
-	Usage  string
-	EnvVar string
-	Hidden bool
+	Name    string
+	Aliases []string
+	Value   Generic
+	Usage   string
+	EnvVars []string
+	Hidden  bool
 }
 
 // String returns the string representation of the generic flag to display the
@@ -90,9 +98,8 @@ func (f GenericFlag) String() string {
 // provided by the user for parsing by the flag
 func (f GenericFlag) Apply(set *flag.FlagSet) {
 	val := f.Value
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
 				val.Set(envVal)
 				break
@@ -100,43 +107,70 @@ func (f GenericFlag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
-		set.Var(f.Value, name, f.Usage)
-	})
+	for _, name := range f.Names() {
+		set.Var(val, name, f.Usage)
+	}
 }
 
-// GetName returns the name of a flag.
-func (f GenericFlag) GetName() string {
-	return f.Name
+// Names returns the names of a flag.
+func (f GenericFlag) Names() []string {
+	return flagNames(f)
 }
 
-// StringSlice is an opaque type for []string to satisfy flag.Value
-type StringSlice []string
+// StringSlice wraps a []string to satisfy flag.Value
+type StringSlice struct {
+	slice      []string
+	hasBeenSet bool
+}
+
+// NewStringSlice creates a *StringSlice with default values
+func NewStringSlice(defaults ...string) *StringSlice {
+	return &StringSlice{slice: append([]string{}, defaults...)}
+}
 
 // Set appends the string value to the list of values
 func (f *StringSlice) Set(value string) error {
-	*f = append(*f, value)
+	if !f.hasBeenSet {
+		f.slice = []string{}
+		f.hasBeenSet = true
+	}
+
+	if strings.HasPrefix(value, slPfx) {
+		// Deserializing assumes overwrite
+		_ = json.Unmarshal([]byte(strings.Replace(value, slPfx, "", 1)), &f.slice)
+		f.hasBeenSet = true
+		return nil
+	}
+
+	f.slice = append(f.slice, value)
 	return nil
 }
 
 // String returns a readable representation of this value (for usage defaults)
 func (f *StringSlice) String() string {
-	return fmt.Sprintf("%s", *f)
+	return fmt.Sprintf("%s", f.slice)
+}
+
+// Serialized allows StringSlice to fulfill Serializeder
+func (f *StringSlice) Serialized() string {
+	jsonBytes, _ := json.Marshal(f.slice)
+	return fmt.Sprintf("%s%s", slPfx, string(jsonBytes))
 }
 
 // Value returns the slice of strings set by this flag
 func (f *StringSlice) Value() []string {
-	return *f
+	return f.slice
 }
 
 // StringSliceFlag is a string flag that can be specified multiple times on the
 // command-line
 type StringSliceFlag struct {
-	Name   string
-	Value  *StringSlice
-	Usage  string
-	EnvVar string
-	Hidden bool
+	Name    string
+	Aliases []string
+	Value   *StringSlice
+	Usage   string
+	EnvVars []string
+	Hidden  bool
 }
 
 // String returns the usage
@@ -146,11 +180,10 @@ func (f StringSliceFlag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f StringSliceFlag) Apply(set *flag.FlagSet) {
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
-				newVal := &StringSlice{}
+				newVal := NewStringSlice()
 				for _, s := range strings.Split(envVal, ",") {
 					s = strings.TrimSpace(s)
 					newVal.Set(s)
@@ -161,50 +194,89 @@ func (f StringSliceFlag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
-		if f.Value == nil {
-			f.Value = &StringSlice{}
-		}
+	if f.Value == nil {
+		f.Value = NewStringSlice()
+	}
+
+	for _, name := range f.Names() {
 		set.Var(f.Value, name, f.Usage)
-	})
+	}
 }
 
-// GetName returns the name of a flag.
-func (f StringSliceFlag) GetName() string {
-	return f.Name
+// Names returns the name of a flag.
+func (f StringSliceFlag) Names() []string {
+	return flagNames(f)
 }
 
-// IntSlice is an opaque type for []int to satisfy flag.Value
-type IntSlice []int
+// IntSlice wraps an []int to satisfy flag.Value
+type IntSlice struct {
+	slice      []int
+	hasBeenSet bool
+}
+
+// NewIntSlice makes an *IntSlice with default values
+func NewIntSlice(defaults ...int) *IntSlice {
+	return &IntSlice{slice: append([]int{}, defaults...)}
+}
+
+// SetInt directly adds an integer to the list of values
+func (i *IntSlice) SetInt(value int) {
+	if !i.hasBeenSet {
+		i.slice = []int{}
+		i.hasBeenSet = true
+	}
+
+	i.slice = append(i.slice, value)
+}
 
 // Set parses the value into an integer and appends it to the list of values
-func (f *IntSlice) Set(value string) error {
+func (i *IntSlice) Set(value string) error {
+	if !i.hasBeenSet {
+		i.slice = []int{}
+		i.hasBeenSet = true
+	}
+
+	if strings.HasPrefix(value, slPfx) {
+		// Deserializing assumes overwrite
+		_ = json.Unmarshal([]byte(strings.Replace(value, slPfx, "", 1)), &i.slice)
+		i.hasBeenSet = true
+		return nil
+	}
+
 	tmp, err := strconv.Atoi(value)
 	if err != nil {
 		return err
 	}
-	*f = append(*f, tmp)
+
+	i.slice = append(i.slice, tmp)
 	return nil
 }
 
 // String returns a readable representation of this value (for usage defaults)
-func (f *IntSlice) String() string {
-	return fmt.Sprintf("%d", *f)
+func (i *IntSlice) String() string {
+	return fmt.Sprintf("%v", i.slice)
+}
+
+// Serialized allows IntSlice to fulfill Serializeder
+func (i *IntSlice) Serialized() string {
+	jsonBytes, _ := json.Marshal(i.slice)
+	return fmt.Sprintf("%s%s", slPfx, string(jsonBytes))
 }
 
 // Value returns the slice of ints set by this flag
-func (f *IntSlice) Value() []int {
-	return *f
+func (i *IntSlice) Value() []int {
+	return i.slice
 }
 
 // IntSliceFlag is an int flag that can be specified multiple times on the
 // command-line
 type IntSliceFlag struct {
-	Name   string
-	Value  *IntSlice
-	Usage  string
-	EnvVar string
-	Hidden bool
+	Name    string
+	Aliases []string
+	Value   *IntSlice
+	Usage   string
+	EnvVars []string
+	Hidden  bool
 }
 
 // String returns the usage
@@ -214,11 +286,10 @@ func (f IntSliceFlag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f IntSliceFlag) Apply(set *flag.FlagSet) {
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
-				newVal := &IntSlice{}
+				newVal := NewIntSlice()
 				for _, s := range strings.Split(envVal, ",") {
 					s = strings.TrimSpace(s)
 					err := newVal.Set(s)
@@ -232,24 +303,27 @@ func (f IntSliceFlag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
-		if f.Value == nil {
-			f.Value = &IntSlice{}
-		}
+	if f.Value == nil {
+		f.Value = NewIntSlice()
+	}
+
+	for _, name := range f.Names() {
 		set.Var(f.Value, name, f.Usage)
-	})
+	}
 }
 
-// GetName returns the name of the flag.
-func (f IntSliceFlag) GetName() string {
-	return f.Name
+// Names returns the name of the flag.
+func (f IntSliceFlag) Names() []string {
+	return flagNames(f)
 }
 
 // BoolFlag is a switch that defaults to false
 type BoolFlag struct {
 	Name        string
+	Aliases     []string
+	Value       bool
 	Usage       string
-	EnvVar      string
+	EnvVars     []string
 	Destination *bool
 	Hidden      bool
 }
@@ -261,85 +335,39 @@ func (f BoolFlag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f BoolFlag) Apply(set *flag.FlagSet) {
-	val := false
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
 				envValBool, err := strconv.ParseBool(envVal)
 				if err == nil {
-					val = envValBool
+					f.Value = envValBool
 				}
 				break
 			}
 		}
 	}
 
-	eachName(f.Name, func(name string) {
+	for _, name := range f.Names() {
 		if f.Destination != nil {
-			set.BoolVar(f.Destination, name, val, f.Usage)
-			return
+			set.BoolVar(f.Destination, name, f.Value, f.Usage)
+			continue
 		}
-		set.Bool(name, val, f.Usage)
-	})
-}
-
-// GetName returns the name of the flag.
-func (f BoolFlag) GetName() string {
-	return f.Name
-}
-
-// BoolTFlag this represents a boolean flag that is true by default, but can
-// still be set to false by --some-flag=false
-type BoolTFlag struct {
-	Name        string
-	Usage       string
-	EnvVar      string
-	Destination *bool
-	Hidden      bool
-}
-
-// String returns a readable representation of this value (for usage defaults)
-func (f BoolTFlag) String() string {
-	return FlagStringer(f)
-}
-
-// Apply populates the flag given the flag set and environment
-func (f BoolTFlag) Apply(set *flag.FlagSet) {
-	val := true
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
-			if envVal := os.Getenv(envVar); envVal != "" {
-				envValBool, err := strconv.ParseBool(envVal)
-				if err == nil {
-					val = envValBool
-					break
-				}
-			}
-		}
+		set.Bool(name, f.Value, f.Usage)
 	}
-
-	eachName(f.Name, func(name string) {
-		if f.Destination != nil {
-			set.BoolVar(f.Destination, name, val, f.Usage)
-			return
-		}
-		set.Bool(name, val, f.Usage)
-	})
 }
 
-// GetName returns the name of the flag.
-func (f BoolTFlag) GetName() string {
-	return f.Name
+// Names returns the name of the flag.
+func (f BoolFlag) Names() []string {
+	return flagNames(f)
 }
 
 // StringFlag represents a flag that takes as string value
 type StringFlag struct {
 	Name        string
+	Aliases     []string
 	Value       string
 	Usage       string
-	EnvVar      string
+	EnvVars     []string
 	Destination *string
 	Hidden      bool
 }
@@ -351,9 +379,8 @@ func (f StringFlag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f StringFlag) Apply(set *flag.FlagSet) {
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
 				f.Value = envVal
 				break
@@ -361,27 +388,28 @@ func (f StringFlag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
+	for _, name := range f.Names() {
 		if f.Destination != nil {
 			set.StringVar(f.Destination, name, f.Value, f.Usage)
-			return
+			continue
 		}
 		set.String(name, f.Value, f.Usage)
-	})
+	}
 }
 
-// GetName returns the name of the flag.
-func (f StringFlag) GetName() string {
-	return f.Name
+// Names returns the name of the flag.
+func (f StringFlag) Names() []string {
+	return flagNames(f)
 }
 
 // IntFlag is a flag that takes an integer
 // Errors if the value provided cannot be parsed
 type IntFlag struct {
 	Name        string
+	Aliases     []string
 	Value       int
 	Usage       string
-	EnvVar      string
+	EnvVars     []string
 	Destination *int
 	Hidden      bool
 }
@@ -393,9 +421,8 @@ func (f IntFlag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f IntFlag) Apply(set *flag.FlagSet) {
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
 				envValInt, err := strconv.ParseInt(envVal, 0, 64)
 				if err == nil {
@@ -406,27 +433,28 @@ func (f IntFlag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
+	for _, name := range f.Names() {
 		if f.Destination != nil {
 			set.IntVar(f.Destination, name, f.Value, f.Usage)
-			return
+			continue
 		}
 		set.Int(name, f.Value, f.Usage)
-	})
+	}
 }
 
-// GetName returns the name of the flag.
-func (f IntFlag) GetName() string {
-	return f.Name
+// Names returns the name of the flag.
+func (f IntFlag) Names() []string {
+	return flagNames(f)
 }
 
 // DurationFlag is a flag that takes a duration specified in Go's duration
 // format: https://golang.org/pkg/time/#ParseDuration
 type DurationFlag struct {
 	Name        string
+	Aliases     []string
 	Value       time.Duration
 	Usage       string
-	EnvVar      string
+	EnvVars     []string
 	Destination *time.Duration
 	Hidden      bool
 }
@@ -438,9 +466,8 @@ func (f DurationFlag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f DurationFlag) Apply(set *flag.FlagSet) {
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
 				envValDuration, err := time.ParseDuration(envVal)
 				if err == nil {
@@ -451,27 +478,28 @@ func (f DurationFlag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
+	for _, name := range f.Names() {
 		if f.Destination != nil {
 			set.DurationVar(f.Destination, name, f.Value, f.Usage)
-			return
+			continue
 		}
 		set.Duration(name, f.Value, f.Usage)
-	})
+	}
 }
 
-// GetName returns the name of the flag.
-func (f DurationFlag) GetName() string {
-	return f.Name
+// Names returns the name of the flag.
+func (f DurationFlag) Names() []string {
+	return flagNames(f)
 }
 
 // Float64Flag is a flag that takes an float value
 // Errors if the value provided cannot be parsed
 type Float64Flag struct {
 	Name        string
+	Aliases     []string
 	Value       float64
 	Usage       string
-	EnvVar      string
+	EnvVars     []string
 	Destination *float64
 	Hidden      bool
 }
@@ -483,9 +511,8 @@ func (f Float64Flag) String() string {
 
 // Apply populates the flag given the flag set and environment
 func (f Float64Flag) Apply(set *flag.FlagSet) {
-	if f.EnvVar != "" {
-		for _, envVar := range strings.Split(f.EnvVar, ",") {
-			envVar = strings.TrimSpace(envVar)
+	if f.EnvVars != nil {
+		for _, envVar := range f.EnvVars {
 			if envVal := os.Getenv(envVar); envVal != "" {
 				envValFloat, err := strconv.ParseFloat(envVal, 10)
 				if err == nil {
@@ -495,18 +522,18 @@ func (f Float64Flag) Apply(set *flag.FlagSet) {
 		}
 	}
 
-	eachName(f.Name, func(name string) {
+	for _, name := range f.Names() {
 		if f.Destination != nil {
 			set.Float64Var(f.Destination, name, f.Value, f.Usage)
-			return
+			continue
 		}
 		set.Float64(name, f.Value, f.Usage)
-	})
+	}
 }
 
-// GetName returns the name of the flag.
-func (f Float64Flag) GetName() string {
-	return f.Name
+// Names returns the name of the flag.
+func (f Float64Flag) Names() []string {
+	return flagNames(f)
 }
 
 func visibleFlags(fl []Flag) []Flag {
@@ -546,25 +573,27 @@ func unquoteUsage(usage string) (string, string) {
 	return "", usage
 }
 
-func prefixedNames(fullName, placeholder string) string {
+func prefixedNames(names []string, placeholder string) string {
 	var prefixed string
-	parts := strings.Split(fullName, ",")
-	for i, name := range parts {
-		name = strings.Trim(name, " ")
+	for i, name := range names {
+		if name == "" {
+			continue
+		}
+
 		prefixed += prefixFor(name) + name
 		if placeholder != "" {
 			prefixed += " " + placeholder
 		}
-		if i < len(parts)-1 {
+		if i < len(names)-1 {
 			prefixed += ", "
 		}
 	}
 	return prefixed
 }
 
-func withEnvHint(envVar, str string) string {
+func withEnvHint(envVars []string, str string) string {
 	envText := ""
-	if envVar != "" {
+	if envVars != nil && len(envVars) > 0 {
 		prefix := "$"
 		suffix := ""
 		sep := ", $"
@@ -573,21 +602,66 @@ func withEnvHint(envVar, str string) string {
 			suffix = "%"
 			sep = "%, %"
 		}
-		envText = fmt.Sprintf(" [%s%s%s]", prefix, strings.Join(strings.Split(envVar, ","), sep), suffix)
+		envText = fmt.Sprintf(" [%s%s%s]", prefix, strings.Join(envVars, sep), suffix)
 	}
 	return str + envText
 }
 
-func stringifyFlag(f Flag) string {
+func flagNames(f Flag) []string {
+	ret := []string{}
+
+	name := flagStringField(f, "Name")
+	aliases := flagStringSliceField(f, "Aliases")
+
+	for _, part := range append([]string{name}, aliases...) {
+		// v1 -> v2 migration warning zone:
+		// Strip off anything after the first found comma or space, which
+		// *hopefully* makes it a tiny bit more obvious that unexpected behavior is
+		// caused by using the v1 form of stringly typed "Name".
+		ret = append(ret, commaWhitespace.ReplaceAllString(part, ""))
+	}
+
+	return ret
+}
+
+func flagStringSliceField(f Flag, name string) []string {
+	fv := flagValue(f)
+	field := fv.FieldByName(name)
+
+	if field.IsValid() {
+		return field.Interface().([]string)
+	}
+
+	return []string{}
+}
+
+func flagStringField(f Flag, name string) string {
+	fv := flagValue(f)
+	field := fv.FieldByName(name)
+
+	if field.IsValid() {
+		return field.String()
+	}
+
+	return ""
+}
+
+func flagValue(f Flag) reflect.Value {
 	fv := reflect.ValueOf(f)
+	for fv.Kind() == reflect.Ptr {
+		fv = reflect.Indirect(fv)
+	}
+	return fv
+}
+
+func stringifyFlag(f Flag) string {
+	fv := flagValue(f)
 
 	switch f.(type) {
 	case IntSliceFlag:
-		return withEnvHint(fv.FieldByName("EnvVar").String(),
-			stringifyIntSliceFlag(f.(IntSliceFlag)))
+		return withEnvHint(flagStringSliceField(f, "EnvVars"), stringifyIntSliceFlag(f.(IntSliceFlag)))
 	case StringSliceFlag:
-		return withEnvHint(fv.FieldByName("EnvVar").String(),
-			stringifyStringSliceFlag(f.(StringSliceFlag)))
+		return withEnvHint(flagStringSliceField(f, "EnvVars"), stringifyStringSliceFlag(f.(StringSliceFlag)))
 	}
 
 	placeholder, usage := unquoteUsage(fv.FieldByName("Usage").String())
@@ -596,7 +670,7 @@ func stringifyFlag(f Flag) string {
 	defaultValueString := ""
 	val := fv.FieldByName("Value")
 
-	if val.IsValid() {
+	if val.IsValid() && val.Kind() != reflect.Bool {
 		needsPlaceholder = true
 		defaultValueString = fmt.Sprintf(" (default: %v)", val.Interface())
 
@@ -615,8 +689,8 @@ func stringifyFlag(f Flag) string {
 
 	usageWithDefault := strings.TrimSpace(fmt.Sprintf("%s%s", usage, defaultValueString))
 
-	return withEnvHint(fv.FieldByName("EnvVar").String(),
-		fmt.Sprintf("%s\t%s", prefixedNames(fv.FieldByName("Name").String(), placeholder), usageWithDefault))
+	return withEnvHint(flagStringSliceField(f, "EnvVars"),
+		fmt.Sprintf("%s\t%s", prefixedNames(f.Names(), placeholder), usageWithDefault))
 }
 
 func stringifyIntSliceFlag(f IntSliceFlag) string {
@@ -627,7 +701,7 @@ func stringifyIntSliceFlag(f IntSliceFlag) string {
 		}
 	}
 
-	return stringifySliceFlag(f.Usage, f.Name, defaultVals)
+	return stringifySliceFlag(f.Usage, append([]string{f.Name}, f.Aliases...), defaultVals)
 }
 
 func stringifyStringSliceFlag(f StringSliceFlag) string {
@@ -640,10 +714,10 @@ func stringifyStringSliceFlag(f StringSliceFlag) string {
 		}
 	}
 
-	return stringifySliceFlag(f.Usage, f.Name, defaultVals)
+	return stringifySliceFlag(f.Usage, append([]string{f.Name}, f.Aliases...), defaultVals)
 }
 
-func stringifySliceFlag(usage, name string, defaultVals []string) string {
+func stringifySliceFlag(usage string, names, defaultVals []string) string {
 	placeholder, usage := unquoteUsage(usage)
 	if placeholder == "" {
 		placeholder = defaultPlaceholder
@@ -655,5 +729,5 @@ func stringifySliceFlag(usage, name string, defaultVals []string) string {
 	}
 
 	usageWithDefault := strings.TrimSpace(fmt.Sprintf("%s%s", usage, defaultVal))
-	return fmt.Sprintf("%s\t%s", prefixedNames(name, placeholder), usageWithDefault)
+	return fmt.Sprintf("%s\t%s", prefixedNames(names, placeholder), usageWithDefault)
 }

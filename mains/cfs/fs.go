@@ -317,6 +317,9 @@ func (f *fs) handleRead(r *fuse.ReadRequest) {
 				Type: fuse.DT_Dir,
 			})
 			for _, de := range d.DirEntries {
+				if de == nil || de.Name == "" {
+					continue
+				}
 				data = fuse.AppendDirent(data, fuse.Dirent{
 					Name:  de.Name,
 					Inode: 1, // TODO: seems to work fine with any non-zero inode.  why?
