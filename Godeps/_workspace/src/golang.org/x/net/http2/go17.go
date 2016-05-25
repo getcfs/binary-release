@@ -8,10 +8,32 @@ package http2
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"time"
 )
+
+type contextContext interface {
+	context.Context
+}
+
+func serverConnBaseContext(c net.Conn, opts *ServeConnOpts) (ctx contextContext, cancel func()) {
+	ctx, cancel = context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, c.LocalAddr())
+	if hs := opts.baseConfig(); hs != nil {
+		ctx = context.WithValue(ctx, http.ServerContextKey, hs)
+	}
+	return
+}
+
+func contextWithCancel(ctx contextContext) (_ contextContext, cancel func()) {
+	return context.WithCancel(ctx)
+}
+
+func requestWithContext(req *http.Request, ctx contextContext) *http.Request {
+	return req.WithContext(ctx)
+}
 
 type clientTrace httptrace.ClientTrace
 
@@ -27,8 +49,8 @@ func traceGotConn(req *http.Request, cc *ClientConn) {
 	ci := httptrace.GotConnInfo{Conn: cc.tconn}
 	cc.mu.Lock()
 	ci.Reused = cc.nextStreamID > 1
-	ci.WasIdle = len(cc.streams) == 0
-	if ci.WasIdle {
+	ci.WasIdle = len(cc.streams) == 0 && ci.Reused
+	if ci.WasIdle && !cc.lastActive.IsZero() {
 		ci.IdleTime = time.Now().Sub(cc.lastActive)
 	}
 	cc.mu.Unlock()
@@ -39,6 +61,18 @@ func traceGotConn(req *http.Request, cc *ClientConn) {
 func traceWroteHeaders(trace *clientTrace) {
 	if trace != nil && trace.WroteHeaders != nil {
 		trace.WroteHeaders()
+	}
+}
+
+func traceGot100Continue(trace *clientTrace) {
+	if trace != nil && trace.Got100Continue != nil {
+		trace.Got100Continue()
+	}
+}
+
+func traceWait100Continue(trace *clientTrace) {
+	if trace != nil && trace.Wait100Continue != nil {
+		trace.Wait100Continue()
 	}
 }
 
